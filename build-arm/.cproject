@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactExtension="" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug,org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe" cleanCommand="cs-rm -rf" description="" id="com.codesourcery.arm_none_eabi.cdt.managedbuild.config.gnu.exe.debug.72337501" name="Debug" parent="com.codesourcery.arm_none_eabi.cdt.managedbuild.config.gnu.exe.debug">
+				<configuration artifactExtension="" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug,org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe" cleanCommand="cs-rm -rf" description="" id="com.codesourcery.arm_none_eabi.cdt.managedbuild.config.gnu.exe.debug.72337501" name="Debug" parent="com.codesourcery.arm_none_eabi.cdt.managedbuild.config.gnu.exe.debug" postbuildStep="arm-none-eabi-objcopy InstrumentCluster -O binary kernel.img" postcleanStep="">
 					<folderInfo id="com.codesourcery.arm_none_eabi.cdt.managedbuild.config.gnu.exe.debug.72337501." name="/" resourcePath="">
 						<toolChain id="com.codesourcery.arm_none_eabi.cdt.managedbuild.toolchain.gnu.exe.debug.183735861" name="Sourcery CodeBench for ARM EABI" superClass="com.codesourcery.arm_none_eabi.cdt.managedbuild.toolchain.gnu.exe.debug">
 							<option id="com.codesourcery.arm_none_eabi.exe.debug.general.board.726697684" name="Board" superClass="com.codesourcery.arm_none_eabi.exe.debug.general.board" value="com.codesourcery.arm_none_eabi.exe.debug.general.board.InstrumentCluster.RaspberryPi" valueType="tree"/>
@@ -52,7 +52,9 @@
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
 								</inputType>
 							</tool>
-							<tool id="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug.408831057" name="Sourcery CodeBench Objcopy" superClass="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug"/>
+							<tool id="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug.408831057" name="Sourcery CodeBench Objcopy" superClass="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug">
+								<option id="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug.options.enable.1882204534" name="Translate output file using objcopy" superClass="com.codesourcery.arm_none_eabi.cdt.managedbuild.tool.gnu.objcopy.exe.debug.options.enable" value="false" valueType="boolean"/>
+							</tool>
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
