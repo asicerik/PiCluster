@@ -7,7 +7,7 @@
 #ifdef WIN32
 GraphicsContext* CreateGraphicsContext()
 {
-	GraphicsContext* ctx = malloc(sizeof(GraphicsContext));
+	GraphicsContext* ctx = new GraphicsContext();
 
 	if (ctx != NULL)
 	{
