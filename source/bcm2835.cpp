@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "bcm2835.h"
+#include "uart0.h"
 
 // This define enables a little test program (by default a blinking output on pin RPI_GPIO_PIN_11)
 // You can do some safe, non-destructive testing on any platform with:
@@ -67,6 +68,7 @@ uint32_t bcm2835_peri_read(volatile uint32_t* paddr)
 	// if subsequent code changes to a different peripheral
 	uint32_t ret = *paddr;
 	uint32_t dummy = *paddr;
+	//UartPrintf("paddr %x=%x ", paddr, ret);
 	return ret;
     }
 }
@@ -893,10 +895,10 @@ uint64_t bcm2835_st_read(void)
 {
     volatile uint32_t* paddr;
     uint64_t st;
-    paddr = bcm2835_st + BCM2835_ST_CHI/4;
+    paddr = bcm2835_st + (BCM2835_ST_CHI >> 2);
     st = bcm2835_peri_read(paddr);
     st <<= 32;
-    paddr = bcm2835_st + BCM2835_ST_CLO/4;
+    paddr = bcm2835_st + (BCM2835_ST_CLO >> 2);
     st += bcm2835_peri_read(paddr);
     return st;
 }
@@ -1007,65 +1009,30 @@ static void unmapmem(void **pmem, size_t size)
 // Initialise this library.
 int bcm2835_init(void)
 {
-    if (debug) 
-    {
-	bcm2835_pads = (uint32_t*)BCM2835_GPIO_PADS;
-	bcm2835_clk  = (uint32_t*)BCM2835_CLOCK_BASE;
-	bcm2835_gpio = (uint32_t*)BCM2835_GPIO_BASE;
-	bcm2835_pwm  = (uint32_t*)BCM2835_GPIO_PWM;
-	bcm2835_spi0 = (uint32_t*)BCM2835_SPI0_BASE;
-	bcm2835_bsc0 = (uint32_t*)BCM2835_BSC0_BASE;
-	bcm2835_bsc1 = (uint32_t*)BCM2835_BSC1_BASE;
-	bcm2835_st   = (uint32_t*)BCM2835_ST_BASE;
-	return 1; // Success
-    }
-    int memfd = -1;
     int ok = 0;
-    // Open the master /dev/memory device
-    if ((memfd = open("/dev/mem", O_RDWR | O_SYNC) ) < 0) 
-    {
-	fprintf(stderr, "bcm2835_init: Unable to open /dev/mem: %s\n",
-		strerror(errno)) ;
-	goto exit;
-    }
 	
     // GPIO:
-    bcm2835_gpio = (uint32_t*)mapmem("gpio", BCM2835_BLOCK_SIZE, memfd, BCM2835_GPIO_BASE);
-    if (bcm2835_gpio == MAP_FAILED) goto exit;
+    bcm2835_gpio = (uint32_t*)BCM2835_GPIO_BASE;
 
     // PWM
-    bcm2835_pwm = (uint32_t*)mapmem("pwm", BCM2835_BLOCK_SIZE, memfd, BCM2835_GPIO_PWM);
-    if (bcm2835_pwm == MAP_FAILED) goto exit;
+    bcm2835_pwm = (uint32_t*)BCM2835_GPIO_PWM;
 
     // Clock control (needed for PWM)
-    bcm2835_clk = (uint32_t*)mapmem("clk", BCM2835_BLOCK_SIZE, memfd, BCM2835_CLOCK_BASE);
-    if (bcm2835_clk == MAP_FAILED) goto exit;
+    bcm2835_clk = (uint32_t*)BCM2835_CLOCK_BASE;
     
-    bcm2835_pads = (uint32_t*)mapmem("pads", BCM2835_BLOCK_SIZE, memfd, BCM2835_GPIO_PADS);
-    if (bcm2835_pads == MAP_FAILED) goto exit;
+    bcm2835_pads = (uint32_t*)BCM2835_GPIO_PADS;
     
-    bcm2835_spi0 = (uint32_t*)mapmem("spi0", BCM2835_BLOCK_SIZE, memfd, BCM2835_SPI0_BASE);
-    if (bcm2835_spi0 == MAP_FAILED) goto exit;
+    bcm2835_spi0 = (uint32_t*)BCM2835_SPI0_BASE;
 
     // I2C
-    bcm2835_bsc0 = (uint32_t*)mapmem("bsc0", BCM2835_BLOCK_SIZE, memfd, BCM2835_BSC0_BASE);
-    if (bcm2835_bsc0 == MAP_FAILED) goto exit;
+    bcm2835_bsc0 = (uint32_t*)BCM2835_BSC0_BASE;
 
-    bcm2835_bsc1 = (uint32_t*)mapmem("bsc1", BCM2835_BLOCK_SIZE, memfd, BCM2835_BSC1_BASE);
-    if (bcm2835_bsc1 == MAP_FAILED) goto exit;
+    bcm2835_bsc1 = (uint32_t*)BCM2835_BSC1_BASE;
 
     // ST
-    bcm2835_st = (uint32_t*)mapmem("st", BCM2835_BLOCK_SIZE, memfd, BCM2835_ST_BASE);
-    if (bcm2835_st == MAP_FAILED) goto exit;
+    bcm2835_st = (uint32_t*)BCM2835_ST_BASE;
 
     ok = 1;
-
-exit:
-    if (memfd >= 0)
-        close(memfd);
-
-    if (!ok)
-	bcm2835_close();
 
     return ok;
 }

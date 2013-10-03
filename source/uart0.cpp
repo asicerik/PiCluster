@@ -61,8 +61,9 @@ void UartInit ()
 
 	/* Disable pull up/pull down resistors */
 	bcm2835_gpio_pud(BCM2835_GPIO_PUD_OFF);
+	bcm2835_delay(1000);
 	bcm2835_gpio_pudclk(14, 1);
-	bcm2835_delay(100);
+	bcm2835_delay(1000);
 	bcm2835_gpio_pudclk(15, 0);
 
 	/* Clear any interrupts */
@@ -104,6 +105,7 @@ void UartInit ()
 int UartPrintf(const char *fmt, ...)
 {
 	int ret = 0;
+	return ret;
 	va_list args;
 	char* ptr = (char*)fmt;
 
