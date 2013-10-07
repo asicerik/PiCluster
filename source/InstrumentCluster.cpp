@@ -24,11 +24,17 @@ InstrumentCluster::Init(const Rect& box)
 	{
 		mExtents = box;
 
+		// The primary surface is where we draw images to the screen
+		mPrimarySurface.Init(box, true);
+
 		// Background - we use a cluster element so that we get all the graphics functions
 		mBackground.Init(box);
 		mBackground.SetGradientAngle(0);
-		mBackground.AddGradientStop(0.0, eOpaque, 32, 32, 32 );	// dark grey
+		mBackground.AddGradientStop(0.0, eOpaque, 64, 64, 64 );	// dark grey
 		mBackground.AddGradientStop(1.0, eOpaque, 0, 0, 0 );	// black
+
+		// Draw directly to the screen
+		mBackground.GetGraphicsContext().SelectPrimaryFrontBuffer();
 		mElements.push_back(mBackground);
 
 		// A test element
@@ -37,6 +43,9 @@ InstrumentCluster::Init(const Rect& box)
 		mTest.SetGradientAngle(0);
 		mTest.AddGradientStop(0.0, eOpaque, 128, 128, 128 );	// med grey
 		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light black
+
+		// Draw directly to the screen
+		mTest.GetGraphicsContext().SelectPrimaryFrontBuffer();
 		mElements.push_back(mTest);
 
 		res = true;

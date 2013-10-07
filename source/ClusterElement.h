@@ -7,7 +7,7 @@ class ClusterElement
 public:
 	ClusterElement();
 	virtual ~ClusterElement();
-	virtual bool Init(const Rect& box);
+	virtual bool Init(const Rect& box, bool isPrimary=false);
 	virtual void SetVisible(bool visible);
 	virtual void Invalidate(const Rect& box);
 	virtual void Invalidate(const Region& region);
@@ -15,6 +15,7 @@ public:
 	virtual Region Update();
 	void AddGradientStop(float position, uint8_t a, uint8_t r, uint8_t g, uint8_t b);
 	void SetGradientAngle(int16_t angle);
+	GraphicsContext& GetGraphicsContext()	{ return mGfx; };
 protected:
 	bool				mVisible;
 	Rect				mBoundingBox;

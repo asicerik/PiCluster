@@ -24,12 +24,15 @@ struct Rect
 	int16_t		h;
 };
 
+struct Color32f;
+
 struct Color32
 {
-	uint8_t		a;
 	uint8_t		b;
 	uint8_t		g;
 	uint8_t		r;
+	uint8_t		a;
+	Color32f ToColor32f();
 };
 
 struct Color32f
@@ -38,15 +41,7 @@ struct Color32f
 	float		b;
 	float		g;
 	float		r;
-	Color32 ToColor32()
-	{
-		Color32 out;
-		out.a = SATURATE_FI(a);
-		out.r = SATURATE_FI(r);
-		out.g = SATURATE_FI(g);
-		out.b = SATURATE_FI(b);
-		return out;
-	}
+	Color32 ToColor32();
 };
 
 // A color point in x/y space
@@ -71,10 +66,12 @@ struct FramebufferProperties
 	{
 		mBitsPerPixel 	= 32;
 		mStride			= 0;
+		mDoubleBuffer	= false;
 	}
-	Rect		mGeometry;
-	int8_t		mBitsPerPixel;
-	int32_t		mStride;
+	Rect			mGeometry;
+	int8_t			mBitsPerPixel;		//!< Only 32 is valid currently
+	int32_t			mStride;			//!< Stride in bytes
+	bool			mDoubleBuffer;		//!< Allocate a front and back buffer for drawing
 };
 
 class GraphicsContextBase
@@ -87,16 +84,39 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties) = 0;
 	virtual void	FreeFramebuffer() = 0;
 	virtual void	FillRectangle(Rect rect, Color32 argb) = 0;
-	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops) = 0;
+	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y) = 0;
+	void GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
-	Color32* GetBackBuffer()	{ return mBackBufferPtr; };
-	Color32* GetFrontBuffer()	{ return mFrontBufferPtr; };
+
+	Color32* SelectPrimaryFrontBuffer()	{ return mCurrBufferPtr = (mPrimaryContext ? mPrimaryContext->GetFrontBuffer() : NULL); };
+	Color32* SelectPrimaryBackBuffer()	{ return mCurrBufferPtr = (mPrimaryContext ? mPrimaryContext->GetBackBuffer() : NULL); };
+	Color32* SelectFrontBuffer()		{ return mCurrBufferPtr = mFrontBufferPtr; };
+	Color32* SelectBackBuffer()			{ return mCurrBufferPtr = mBackBufferPtr; };
 	
+	Color32* GetSelectedBuffer()		{ return mCurrBufferPtr; };
+	FramebufferProperties& GetBufferProps()
+	{
+		return mFBProperties;
+	};
+	FramebufferProperties& GetSelectedBufferProps()	
+	{ 
+		if (!mPrimaryContext || ((mCurrBufferPtr != mPrimaryContext->GetFrontBuffer()) &&
+								(mCurrBufferPtr != mPrimaryContext->GetBackBuffer())))
+			return mFBProperties;
+		else
+			return mPrimaryContext->GetBufferProps();
+	};
+	Color32* GetBackBuffer()			{ return mBackBufferPtr; };
+	Color32* GetFrontBuffer()			{ return mFrontBufferPtr; };
+
+	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
+
 protected:
+	static GraphicsContextBase*	mPrimaryContext;	//!< Pointer to the primary surface
+	Color32*				mCurrBufferPtr;			//!< Pointer to the currently selected framebuffer data
 	Color32*				mFrontBufferPtr;		//!< Pointer to the active framebuffer data
 	Color32*				mBackBufferPtr;			//!< Pointer to the inactive framebuffer data (if present)
-	FramebufferProperties	mPrimaryFBProperties;	//!< The main framebuffer(s) for screen drawing
 	FramebufferProperties	mFBProperties;			//!< Properties for this framebuffer
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
 };
@@ -109,18 +129,17 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
 	virtual void	FreeFramebuffer();
 	virtual void	FillRectangle(Rect rect, Color32 argb);
-	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
 	Color32* GetBackBuffer();
 	Color32* GetFrontBuffer();
+	HDC GetDC()	{ return mDC; };
 	
 protected:
-	bool AllocateWindowsBitmap(FramebufferProperties& properties, HDC& dc, BITMAPINFO& info, HBITMAP& bitmap);
+	bool AllocateWindowsBitmap(FramebufferProperties& properties, HDC& dc, BITMAPINFO& info, HBITMAP& bitmap, Color32*& ptr);
 	HDC						mDC;
 	BITMAPINFO				mBitmapInfo;
 	HBITMAP					mBitmap;
-	HDC						mPrimaryDC;
-	BITMAPINFO				mPrimaryBitmapInfo;
-	HBITMAP					mPrimaryBitmap;
+	HBITMAP					mBackBufferBitmap;
 };
 typedef GraphicsContextWin GraphicsContext;
 #else
@@ -134,7 +153,7 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
 	virtual void	FreeFramebuffer();
 	virtual void	FillRectangle(Rect rect, Color32 argb);
-	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX);
 	
 private:
 };

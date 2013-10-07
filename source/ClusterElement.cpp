@@ -19,13 +19,21 @@ ClusterElement::~ClusterElement()
 }
 
 bool
-ClusterElement::Init(const Rect& box)
+ClusterElement::Init(const Rect& box, bool isPrimary)
 {
 	bool res = false;
 	do
 	{
 		mBoundingBox = box;
 		Invalidate(box);
+		FramebufferProperties properties;
+		properties.mBitsPerPixel = 32;
+		properties.mDoubleBuffer = false;
+		properties.mGeometry = box;
+		if (isPrimary)
+			mGfx.AllocatePrimaryFramebuffer(properties);
+		else
+			mGfx.AllocateFramebuffer(properties);
 
 		res = true;
 	} while (false);
@@ -72,17 +80,18 @@ ClusterElement::Invalidate(const Region& region)
 Region 
 ClusterElement::Update()
 {
-	Region ret;
-	if (!mBackgroundDirtyRegion.GetDirtyRects().empty())
+	if (true || !mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
+		mGfx.GradientRectangle(mGradientAngle, mGradientStops);
 	}
-	return ret;
+	mForegroundDirtyRegion.Clear();
+	return mBackgroundDirtyRegion;
 }	
 
 void 
 ClusterElement::AddGradientStop(float position, uint8_t a, uint8_t r, uint8_t g, uint8_t b)
 {
-	GradientStop stop = { position, a, b, g, r };
+	GradientStop stop = { position, b, g, r, a };
 	mGradientStops.push_back(stop);
 }
 

@@ -109,7 +109,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    hInst = hInstance; // Store instance handle in our global variable
 
    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
+      296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
 
    if (!hWnd)
    {
@@ -160,9 +160,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_PAINT:
-		hdc = BeginPaint(hWnd, &ps);
-		// TODO: Add any drawing code here...
-		EndPaint(hWnd, &ps);
+		{
+			hdc = BeginPaint(hWnd, &ps);
+			hdc = GetDC(hWnd);
+			GraphicsContextWin* ctx = (GraphicsContextWin*)&gCluster.GetPrimarySurface().GetGraphicsContext();
+			gCluster.Update();
+
+			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
+			EndPaint(hWnd, &ps);
+
+			Sleep(100);
+			::InvalidateRect(hWnd, NULL, false);
+		}
 		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
