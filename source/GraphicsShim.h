@@ -1,30 +1,144 @@
 #pragma once
 
+#include <vector>
+
 static const uint32_t kMaxFramebufferWidth	= 4096;
 static const uint32_t kMaxFramebufferHeight	= 4096;
 static const uint32_t kMaxFramebufferDepth	= 32;
 
+#define SATURATE_II(x) (((x) > 255) ? 255 : ((x) < 0) ? 0 : (x))
+#define SATURATE_FF(x) (((x) > 255) ? 255 : ((x) < 0) ? 0 : (x))
+#define SATURATE_FI(x) (((x) > 255.0) ? 255 : ((x) < 0.0) ? 0 : (uint8_t)(x))
+
+struct Point
+{
+	int16_t		x;
+	int16_t		y;
+};
+
+struct Rect
+{
+	int16_t		x;
+	int16_t		y;
+	int16_t		w;
+	int16_t		h;
+};
+
+struct Color32
+{
+	uint8_t		a;
+	uint8_t		b;
+	uint8_t		g;
+	uint8_t		r;
+};
+
+struct Color32f
+{
+	float		a;
+	float		b;
+	float		g;
+	float		r;
+	Color32 ToColor32()
+	{
+		Color32 out;
+		out.a = SATURATE_FI(a);
+		out.r = SATURATE_FI(r);
+		out.g = SATURATE_FI(g);
+		out.b = SATURATE_FI(b);
+		return out;
+	}
+};
+
+// A color point in x/y space
+struct GradientStop
+{
+	float		mPosition;
+	Color32		mColor;
+};
+
+enum Opacity
+{
+	eTransparent	= 0,
+	e25Percent		= 64,
+	e50Percent		= 128,
+	e75Percent		= 192,
+	eOpaque			= 255
+};
+
+struct FramebufferProperties
+{
+	FramebufferProperties()
+	{
+		mBitsPerPixel 	= 32;
+		mStride			= 0;
+	}
+	Rect		mGeometry;
+	int8_t		mBitsPerPixel;
+	int32_t		mStride;
+};
+
+class GraphicsContextBase
+{
+public:
+	GraphicsContextBase() {};
+	virtual ~GraphicsContextBase() {};
+
+	virtual bool	AllocatePrimaryFramebuffer(FramebufferProperties& properties) = 0;
+	virtual bool	AllocateFramebuffer(FramebufferProperties& properties) = 0;
+	virtual void	FreeFramebuffer() = 0;
+	virtual void	FillRectangle(Rect rect, Color32 argb) = 0;
+	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops) = 0;
+	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
+	Rect GetClippingRect()				{ return mClippingRect; };
+	Color32* GetBackBuffer()	{ return mBackBufferPtr; };
+	Color32* GetFrontBuffer()	{ return mFrontBufferPtr; };
+	
+protected:
+	Color32*				mFrontBufferPtr;		//!< Pointer to the active framebuffer data
+	Color32*				mBackBufferPtr;			//!< Pointer to the inactive framebuffer data (if present)
+	FramebufferProperties	mPrimaryFBProperties;	//!< The main framebuffer(s) for screen drawing
+	FramebufferProperties	mFBProperties;			//!< Properties for this framebuffer
+	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
+};
+
 #ifdef WIN32
-typedef struct 
+class GraphicsContextWin : public GraphicsContextBase
 {
-	HDC			mDC;
-	BITMAPINFO	mBitmapInfo;
-	HBITMAP		mBitmap;
-	uint32_t*	mABGR;
-	int32_t		mWidth;
-	int32_t		mHeight;
-	int8_t		mBitsPerPixel;
-	int32_t		mStride;
-} GraphicsContext;
+public:
+	virtual bool	AllocatePrimaryFramebuffer(FramebufferProperties& properties);
+	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
+	virtual void	FreeFramebuffer();
+	virtual void	FillRectangle(Rect rect, Color32 argb);
+	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	Color32* GetBackBuffer();
+	Color32* GetFrontBuffer();
+	
+protected:
+	bool AllocateWindowsBitmap(FramebufferProperties& properties, HDC& dc, BITMAPINFO& info, HBITMAP& bitmap);
+	HDC						mDC;
+	BITMAPINFO				mBitmapInfo;
+	HBITMAP					mBitmap;
+	HDC						mPrimaryDC;
+	BITMAPINFO				mPrimaryBitmapInfo;
+	HBITMAP					mPrimaryBitmap;
+};
+typedef GraphicsContextWin GraphicsContext;
 #else
-typedef struct 
+class GraphicsContextPi : public GraphicsContextBase
 {
-	uint32_t*	mABGR;
-	int32_t		mWidth;
-	int32_t		mHeight;
-	int8_t		mBitsPerPixel;
-	int32_t		mStride;
-} GraphicsContext;
+public:
+	GraphicsContextPi();
+	virtual ~GraphicsContextPi();
+
+	virtual bool	AllocatePrimaryFramebuffer(FramebufferProperties& properties);
+	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
+	virtual void	FreeFramebuffer();
+	virtual void	FillRectangle(Rect rect, Color32 argb);
+	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	
+private:
+};
+typedef GraphicsContextPi GraphicsContext;
 
 // VideoCore mailbox registers
 static uint32_t* VideoCoreMailboxRead		= (uint32_t*)0x2000B880;
@@ -88,27 +202,5 @@ struct VideoCoreFramebufferDescriptor
 	uint32_t	bufferSize;
 }  __attribute__ ((aligned(16)));
 
-bool CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDesc);
 
 #endif
-
-typedef struct
-{
-	int32_t		x;
-	int32_t		y;
-	int32_t		w;
-	int32_t		h;
-} Rect;
-typedef struct
-{
-	uint8_t		a;
-	uint8_t		r;
-	uint8_t		g;
-	uint8_t		b;
-} Color32;
-
-GraphicsContext*	CreateGraphicsContext();
-void	FreeGraphicsContext(GraphicsContext* ctx);
-int32_t	AllocateFrameBuffer(GraphicsContext* ctx);
-void	FreeFrameBuffer(GraphicsContext* ctx);
-void	FillRectangle(GraphicsContext* ctx, Rect rect, Color32 argb); 

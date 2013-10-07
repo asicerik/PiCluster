@@ -25,19 +25,19 @@ int main(int argc, char** argv)
 		bcm2835_gpio_clr(16);
 		bcm2835_st_delay(bcm2835_st_read(), 500000);
 	}
-	VideoCoreFramebufferDescriptor fbDesc;
-	fbDesc.width	= fbDesc.virtualWidth	=	1280;
-	fbDesc.height	= fbDesc.virtualHeight	=	480;
-	fbDesc.depth	= 32;
-	fbDesc.pitch	= fbDesc.width * (fbDesc.depth >> 3);
-	if (CreatePrimaryFramebuffer(fbDesc))
+	GraphicsContextPi ctx;
+	FramebufferProperties properties;
+	properties.mGeometry.w	= 1280;
+	properties.mGeometry.h	= 480;
+	properties.mBitsPerPixel= 32;
+	if (ctx.AllocatePrimaryFramebuffer(properties))
 	{
 		uint32_t color = 0xff3f0000;
 		{
-			for (int y=0;y<fbDesc.height;y++)
+			for (int y=0;y<properties.mGeometry.h;y++)
 			{
-				uint32_t* ptr = fbDesc.buffer + y * (fbDesc.pitch >> 2);
-				for (int x=0;x<fbDesc.width;x++)
+				uint32_t* ptr = (uint32_t*)ctx.GetFrontBuffer() + y * (properties.mStride >> 2);
+				for (int x=0;x<properties.mGeometry.w;x++)
 				{
 					*ptr++ = color;
 				}

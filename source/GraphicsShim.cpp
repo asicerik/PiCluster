@@ -1,4 +1,5 @@
 #include "stdint.h"
+#include <cstddef>
 #ifdef WIN32
 #include "windows.h"
 #endif
@@ -6,56 +7,81 @@
 #include "uart0.h"
 
 #ifdef WIN32
-GraphicsContext* CreateGraphicsContext()
+bool
+GraphicsContextWin::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 {
-	GraphicsContext* ctx = new GraphicsContext();
-
-	if (ctx != NULL)
+	bool res = false;
+	do
 	{
-		ctx->mDC = CreateCompatibleDC(NULL);
-	}
-	return ctx;
+		FreeFramebuffer();
+
+		res = AllocateWindowsBitmap(properties, mPrimaryDC, mPrimaryBitmapInfo, mPrimaryBitmap);
+
+	} while (false);
+	return res;
 }
 
-void FreeGraphicsContext(GraphicsContext* ctx)
+bool
+GraphicsContextWin::AllocateFramebuffer(FramebufferProperties& properties)
 {
-	if (ctx != NULL)
+	bool res = false;
+	do
 	{
-		DeleteDC(ctx->mDC);
-		free(ctx);
-	}
+		FreeFramebuffer();
+
+		res = AllocateWindowsBitmap(properties, mDC, mBitmapInfo, mBitmap);
+
+	} while (false);
+	return res;
 }
 
-int32_t AllocateFrameBuffer(GraphicsContext* ctx)
+bool
+GraphicsContextWin::AllocateWindowsBitmap(FramebufferProperties& properties, HDC& dc, BITMAPINFO& info, HBITMAP& bitmap)
 {
-	if (ctx == NULL || ctx->mDC == NULL || (ctx->mWidth < 1) || (ctx->mHeight < 1) || (ctx->mBitsPerPixel != 32))
-		return -1;
+	bool res = false;
+	do
+	{
+		FreeFramebuffer();
+		mDC = CreateCompatibleDC(NULL);
 
-	ctx->mBitmapInfo.bmiHeader.biSize				= sizeof( ctx->mBitmapInfo.bmiHeader );
-	ctx->mBitmapInfo.bmiHeader.biWidth				= ctx->mWidth;
-	ctx->mBitmapInfo.bmiHeader.biHeight				= -ctx->mHeight;
-	ctx->mBitmapInfo.bmiHeader.biPlanes				= 1;
-	ctx->mBitmapInfo.bmiHeader.biCompression		= BI_RGB;
-	ctx->mBitmapInfo.bmiHeader.biBitCount			= ctx->mBitsPerPixel;
-	ctx->mBitmapInfo.bmiHeader.biSizeImage			= (ctx->mBitsPerPixel/8)*ctx->mWidth*ctx->mHeight; 
+		if (mDC == NULL)
+		{
+			break;
+		}
 
-	// Create the source bitmap.
-	ctx->mBitmap = CreateDIBSection( ctx->mDC, &ctx->mBitmapInfo, DIB_RGB_COLORS, (void **)&ctx->mABGR, NULL, 0 );
+		if ((properties.mGeometry.w < 1) || (properties.mGeometry.h < 1) || (properties.mBitsPerPixel != 32))
+			break;
 
-	// Now select the back buffer.
-	SelectObject( ctx->mDC, ctx->mBitmap );
+		mBitmapInfo.bmiHeader.biSize		= sizeof( mBitmapInfo.bmiHeader );
+		mBitmapInfo.bmiHeader.biWidth		= properties.mGeometry.w;
+		mBitmapInfo.bmiHeader.biHeight		= -properties.mGeometry.h; // -ive draws top down
+		mBitmapInfo.bmiHeader.biPlanes		= 1;
+		mBitmapInfo.bmiHeader.biCompression	= BI_RGB;
+		mBitmapInfo.bmiHeader.biBitCount	= properties.mBitsPerPixel;
+		mBitmapInfo.bmiHeader.biSizeImage	= (properties.mBitsPerPixel/8)*properties.mGeometry.w*properties.mGeometry.h; 
 
-	return 0;
+		// Create the front buffer bitmap
+		// TODO : double buffer
+		mBitmap = CreateDIBSection( mDC, &mBitmapInfo, DIB_RGB_COLORS, (void **)&mFrontBufferPtr, NULL, 0 );
+
+		// Now select the buffer into the device context so that we can use the Windows graphics calls.
+		SelectObject( mDC, mBitmap );
+
+		res = true;
+	} while (false);
+	return res;
 }
 
-void FreeFrameBuffer(GraphicsContext* ctx)
+void 
+GraphicsContextWin::FreeFramebuffer()
 {
-	DeleteObject(ctx->mBitmap);
-	ctx->mBitmap = NULL;
-	ctx->mBitmap = NULL;
+	DeleteObject(mBitmap);
+	mFrontBufferPtr = NULL;
+	mBackBufferPtr = NULL;
 }
 
-void FillRectangle(GraphicsContext* ctx, Rect rect, Color32 argb)
+void 
+GraphicsContextWin::FillRectangle(Rect rect, Color32 argb)
 {
 	RECT winRect;
 	HBRUSH brush;
@@ -64,26 +90,85 @@ void FillRectangle(GraphicsContext* ctx, Rect rect, Color32 argb)
 	winRect.top		= rect.y;
 	winRect.bottom	= rect.y + rect.h;
 	brush = CreateSolidBrush(RGB(argb.r, argb.g, argb.b));
-	FillRect(ctx->mDC, &winRect, brush);
+	FillRect(mDC, &winRect, brush);
 	DeleteObject(brush);
 }
 
+void
+GraphicsContextWin::GradientRectangle(int16_t angle, std::vector<GradientStop>& stops)
+{
+	if (stops.empty())
+		return;
+
+	std::vector<int16_t>  yStops;
+	std::vector<Color32f> colorDeltas;
+	for (size_t i=0; i<stops.size(); i++)
+	{
+		int16_t deltaY = (int16_t)(stops[i].mPosition * mFBProperties.mGeometry.h);
+		yStops.push_back(deltaY);
+		if ((i+1) < stops.size())
+		{
+			Color32f delta;
+			delta.a = (stops[i+1].mColor.a - stops[i].mColor.a) / (float)deltaY;
+			delta.r = (stops[i+1].mColor.r - stops[i].mColor.r) / (float)deltaY;
+			delta.g = (stops[i+1].mColor.g - stops[i].mColor.g) / (float)deltaY;
+			delta.b = (stops[i+1].mColor.b - stops[i].mColor.b) / (float)deltaY;
+			colorDeltas.push_back(delta);
+		}
+	}
+
+	for (int16_t y=0; y<mFBProperties.mGeometry.h;y++)
+	{
+		for (int16_t x=0; x<mFBProperties.mGeometry.w;x++)
+		{
+		}
+	}
+}
+
 #else
-GraphicsContext* CreateGraphicsContext()
-{
-	return 0;
-}
 
-void FreeGraphicsContext(GraphicsContext* ctx)
+GraphicsContextPi::GraphicsContextPi()
 {
 }
 
-int32_t AllocateFrameBuffer(GraphicsContext* ctx)
+GraphicsContextPi::~GraphicsContextPi()
 {
-	return -1;
+	FreeFramebuffer();
 }
 
-void FreeFrameBuffer(GraphicsContext* ctx)
+bool
+GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
+{
+	bool res = false;
+	do
+	{
+		FreeFramebuffer();
+		res = true;
+	} while (false);
+	return res;
+}
+
+bool
+GraphicsContextPi::AllocateFramebuffer(FramebufferProperties& properties)
+{
+	bool res = false;
+	do
+	{
+		FreeFramebuffer();
+		res = true;
+	} while (false);
+	return res;
+}
+
+void
+GraphicsContextPi::FreeFramebuffer()
+{
+	mFrontBufferPtr = NULL;
+	mBackBufferPtr = NULL;
+}
+
+void
+GraphicsContextPi::FillRectangle(Rect rect, Color32 argb)
 {
 }
 

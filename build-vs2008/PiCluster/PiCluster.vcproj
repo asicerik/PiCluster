@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="$(SolutionDir)"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)&quot;;../../source"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -172,6 +172,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath="..\..\source\ClusterElement.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\GraphicsShim.cpp"
 				>
 			</File>
@@ -181,6 +185,10 @@
 			</File>
 			<File
 				RelativePath=".\PiCluster.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\Region.cpp"
 				>
 			</File>
 			<File
@@ -210,6 +218,10 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
+				RelativePath="..\..\source\ClusterElement.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\GraphicsShim.h"
 				>
 			</File>
@@ -219,6 +231,10 @@
 			</File>
 			<File
 				RelativePath=".\PiCluster.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\Region.h"
 				>
 			</File>
 			<File
