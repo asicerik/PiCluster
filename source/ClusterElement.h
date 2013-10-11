@@ -13,6 +13,7 @@ public:
 	virtual void Invalidate(const Region& region);
 	virtual void SetLocation(const Point& loc);
 	virtual Region Update();
+	virtual Region Draw();
 	void AddGradientStop(float position, uint8_t a, uint8_t r, uint8_t g, uint8_t b);
 	void SetGradientAngle(int16_t angle);
 	GraphicsContext& GetGraphicsContext()	{ return mGfx; };
@@ -25,6 +26,7 @@ protected:
 	int16_t				mGradientAngle;
 	std::vector<GradientStop>
 						mGradientStops;
+	bool				mStateChanged;
 };
 
 

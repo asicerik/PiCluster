@@ -1,6 +1,22 @@
 #include "stdint.h"
 #include "stdarg.h"
 #include "uart0.h"
+#ifdef WIN32
+void UartPutChar(char val)	{}
+
+char UartGetChar()			{ return '*'; }
+
+void UartFlushRxFifo()		{}
+
+void UartInit()				{}
+
+int UartPrintf(const char *fmt, ...)		{ return 0; }
+
+int UartPrintInt(int i, eIntegerBase base)	{ return 0; }
+
+int UartPrintPtr(void* i)					{ return 0; }
+
+#else
 #include "bcm2835.h"
 
 int32_t* uart0_dr		= (int32_t*)UART0_DR;
@@ -22,7 +38,7 @@ int32_t* uart0_itip		= (int32_t*)UART0_ITIP;
 int32_t* uart0_itop		= (int32_t*)UART0_ITOP;
 int32_t* uart0_tdr		= (int32_t*)UART0_TDR;
 
-void UartPutChar(char val)
+void __attribute__((optimize("O0"))) UartPutChar(char val)
 {
 	/* Wait for some space to open up in the tx fifo */
 	while (*uart0_fr & UART_DR_TX_FULL);
@@ -31,7 +47,7 @@ void UartPutChar(char val)
 	*uart0_dr = ((uint32_t)val) & 0x000000ff;
 }
 
-char UartGetChar()
+char __attribute__((optimize("O0"))) UartGetChar()
 {
 	/* Wait for some data to show up in the rx fifo */
 	while (*uart0_fr & UART_DR_RX_EMPTY);
@@ -40,7 +56,7 @@ char UartGetChar()
 	return (uint8_t)(*uart0_dr & 0x000000ff);
 }
 
-void UartFlushRxFifo()
+void __attribute__((optimize("O0"))) UartFlushRxFifo()
 {
 	/* Wait for some data to show up in the rx fifo */
 	while (*uart0_fr & ~UART_DR_RX_EMPTY)
@@ -59,12 +75,9 @@ void UartInit ()
 	/* Disable the uart for now */
 	*uart0_cr = 0;
 
-	/* Disable pull up/pull down resistors */
-	bcm2835_gpio_pud(BCM2835_GPIO_PUD_OFF);
-	bcm2835_delay(1000);
-	bcm2835_gpio_pudclk(14, 1);
-	bcm2835_delay(1000);
-	bcm2835_gpio_pudclk(15, 0);
+	/* Disable pull up/pull down resistors on pins 14,15 */
+	bcm2835_gpio_set_pud(14, BCM2835_GPIO_PUD_OFF);
+	bcm2835_gpio_set_pud(15, BCM2835_GPIO_PUD_OFF);
 
 	/* Clear any interrupts */
 	*uart0_icr = UART_ICR_ALL;
@@ -100,12 +113,15 @@ void UartInit ()
 
 	/* Finally, enable the uart for send and receive */
 	*uart0_cr = UART_CR_UART_EN | UART_CR_TX_EN | UART_CR_RX_EN;
+
+	/* Flush the rx fifo in case there is anything in there */
+	//UartFlushRxFifo();
 }
 
 int UartPrintf(const char *fmt, ...)
 {
 	int ret = 0;
-	return ret;
+
 	va_list args;
 	char* ptr = (char*)fmt;
 
@@ -113,6 +129,7 @@ int UartPrintf(const char *fmt, ...)
 	while (true)
 	{
 		char c = *ptr++;
+
 		if (c == '\0')
 			break;
 
@@ -248,3 +265,5 @@ int UartPrintPtr(void* i)
 	}
 	return ret;
 }
+
+#endif

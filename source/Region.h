@@ -23,6 +23,7 @@ public:
 	{
 		return mDirtyRects;
 	};
+	Rect GetDirtyRect();
 protected:
 	std::vector<Rect>	mDirtyRects;
 };

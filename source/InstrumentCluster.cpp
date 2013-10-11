@@ -4,6 +4,7 @@
 #ifdef WIN32
 #include "windows.h"
 #endif
+#include "uart0.h"
 #include "GraphicsShim.h"
 #include "ClusterElement.h"
 #include "InstrumentCluster.h"
@@ -30,23 +31,26 @@ InstrumentCluster::Init(const Rect& box)
 		// Background - we use a cluster element so that we get all the graphics functions
 		mBackground.Init(box);
 		mBackground.SetGradientAngle(0);
-		mBackground.AddGradientStop(0.0, eOpaque, 64, 64, 64 );	// dark grey
-		mBackground.AddGradientStop(1.0, eOpaque, 0, 0, 0 );	// black
+		mBackground.AddGradientStop(0.0, eOpaque, 0, 0, 64);
+		mBackground.AddGradientStop(1.0, eOpaque, 0, 0, 0);
 
 		// Draw directly to the screen
-		mBackground.GetGraphicsContext().SelectPrimaryFrontBuffer();
-		mElements.push_back(mBackground);
+		mBackground.GetGraphicsContext().SelectSurface(eFront);
+		mElements.push_back(&mBackground);
 
 		// A test element
-		Rect box = { 0, 0, 100, 100 };
+		Rect box;
+		box.x = box.y = 0;
+		box.w = box.h = 100;
+
 		mTest.Init(box);
 		mTest.SetGradientAngle(0);
 		mTest.AddGradientStop(0.0, eOpaque, 128, 128, 128 );	// med grey
 		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light black
 
 		// Draw directly to the screen
-		mTest.GetGraphicsContext().SelectPrimaryFrontBuffer();
-		mElements.push_back(mTest);
+		mTest.GetGraphicsContext().SelectSurface(eFront);
+		mElements.push_back(&mTest);
 
 		res = true;
 	} while (false);
@@ -57,23 +61,57 @@ bool
 InstrumentCluster::Update()
 {
 	bool res = false;
+	static Point loc = { 0, 0 };
 	do
 	{
-		// Update each element in turn.
-		// The update calls will return the background area that was invalidated
-		// by the update.
-		// For now, elements cannot invalidate each other, except for the background
-		Region backgroundUpdate;
-		std::vector<ClusterElement>::iterator iter = mElements.begin();
-		for (; iter != mElements.end(); iter++)
+		mTest.SetLocation(loc);
+		loc.x++;
+		loc.y++;
+		if (loc.y > 480)
 		{
-			Region invalidated = iter->Update();
-			backgroundUpdate = Region::CombineRegion(backgroundUpdate, invalidated, Region::eOr);
+			loc.x = 0;
+			loc.y = 0;
 		}
-		mBackground.Invalidate(backgroundUpdate);
+
+		// Go through all the elements in top-down Z order
+		// Elements will return any background regions that were exposed
+		// We tell the lower element about the exposed region so it can redraw it
+		Region backgroundUpdate;
+		std::vector<ClusterElement*>::reverse_iterator iter = mElements.rbegin();
+		for (; iter != mElements.rend(); iter++)
+		{
+			// Invalidate the region exposed from the element above (if any)
+			(*iter)->Invalidate(backgroundUpdate);
+
+			// Update the element. Note - it may consume any prior background updates
+			// if it completely contains the invalidated region.
+			// It may also make the invalid region bigger
+			backgroundUpdate = (*iter)->Update();
+		}
 
 		res = true;
 	} while (false);
 	return res;
+}
+
+void
+InstrumentCluster::Draw()
+{
+
+	// Go through all the elements in bottoms-up Z order
+	// Elements will return a region indicating the area it updated
+	// so that we know what areas we need to copy to the screen (if any)
+
+	// Start by clearing the dirty regions since it assumed
+	// the previous updates copied all the data needed
+	mDirty.Clear();
+
+	std::vector<ClusterElement*>::iterator iter = mElements.begin();
+	for (; iter != mElements.end(); iter++)
+	{
+		// Combine the updated regions from each draw call
+		Region drawResult = (*iter)->Draw();
+		mDirty = Region::CombineRegion(mDirty, drawResult, Region::eOr);
+	}
 }
 

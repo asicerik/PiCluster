@@ -138,3 +138,31 @@ Region::IntersectRects(const Rect& a, const Rect& b)
 
 	return c;
 }
+
+Rect 
+Region::GetDirtyRect()
+{
+	Rect ret = { 0, 0, 0, 0 };
+	if (!mDirtyRects.empty())
+	{
+		Point topLeft  = { INT16_MAX, INT16_MAX };
+		Point botRight = { INT16_MIN, INT16_MIN };
+		std::vector<Rect>::iterator iter = mDirtyRects.begin();
+		for (; iter != mDirtyRects.end(); iter++)
+		{
+			if (iter->x < topLeft.x)
+				topLeft.x = iter->x;
+			if (iter->y < topLeft.y)
+				topLeft.y = iter->y;
+			if ((iter->x + iter->w) > botRight.x)
+				botRight.x = (iter->x + iter->w);
+			if ((iter->y + iter->h) > botRight.y)
+				botRight.y = (iter->y + iter->h);
+		}
+		ret.x = topLeft.x;
+		ret.y = topLeft.y;
+		ret.w = botRight.x - topLeft.x;
+		ret.h = botRight.y - topLeft.y;
+	}
+	return ret;
+}

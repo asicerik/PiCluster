@@ -161,15 +161,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_PAINT:
 		{
+			RECT winRect;
 			hdc = BeginPaint(hWnd, &ps);
-			hdc = GetDC(hWnd);
 			GraphicsContextWin* ctx = (GraphicsContextWin*)&gCluster.GetPrimarySurface().GetGraphicsContext();
 			gCluster.Update();
+			gCluster.Draw();
 
+			Rect dirty = gCluster.mDirty.GetDirtyRect();
+			winRect.left  = dirty.x;
+			winRect.top   = dirty.y;
+			winRect.right = dirty.x + dirty.w;
+			winRect.bottom= dirty.y + dirty.h;
 			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
+
+			// Draw the region
+			SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			SelectObject(hdc, GetStockObject(WHITE_PEN));
+			Rectangle(hdc, winRect.left, winRect.top, winRect.right, winRect.bottom);
 			EndPaint(hWnd, &ps);
 
-			Sleep(100);
+			Sleep(1);
+			::InvalidateRect(hWnd, &winRect, false);
 			::InvalidateRect(hWnd, NULL, false);
 		}
 		break;
