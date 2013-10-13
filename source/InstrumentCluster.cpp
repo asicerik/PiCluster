@@ -5,8 +5,7 @@
 #include "windows.h"
 #endif
 #include "uart0.h"
-#include "GraphicsShim.h"
-#include "ClusterElement.h"
+#include "Trig.h"
 #include "InstrumentCluster.h"
 
 InstrumentCluster::InstrumentCluster()
@@ -23,6 +22,8 @@ InstrumentCluster::Init(const Rect& box)
 	bool res = false;
 	do
 	{
+		Trig::BuildTrigTabs();
+
 		mExtents = box;
 
 		// The primary surface is where we draw images to the screen
@@ -49,8 +50,22 @@ InstrumentCluster::Init(const Rect& box)
 		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light black
 
 		// Draw directly to the screen
-		mTest.GetGraphicsContext().SelectSurface(eFront);
-		mElements.push_back(&mTest);
+		mTest.GetGraphicsContext().SelectSurface(ePrimaryFront);
+		//mElements.push_back(&mTest);
+
+		// Speedometer
+		box.x = box.y = 0;
+		box.w = box.h = 360;
+		Point point;
+		point.x = 0;
+		point.y = 0;
+
+		mSpeedo.Init(box);
+		mSpeedo.SetLocation(point);
+
+		//// Draw directly to the screen
+		mSpeedo.GetGraphicsContext().SelectSurface(ePrimaryFront);
+		mElements.push_back(&mSpeedo);
 
 		res = true;
 	} while (false);

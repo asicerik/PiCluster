@@ -1,5 +1,6 @@
 #include "stddef.h"
 #include "stdarg.h"
+#include "string.h"
 #include "stdint.h"
 #ifdef WIN32
 #include "windows.h"
@@ -10,42 +11,57 @@
 #include "ClusterElement.h"
 #include "DialGuage.h"
 
-ClusterElement::ClusterElement()
+DialGuage::DialGuage()
 {
 	mVisible		= true;
 	mStateChanged	= true;
 	mGradientAngle	= 0;
 }
 
-ClusterElement::~ClusterElement()
+DialGuage::~DialGuage()
 {
 }
 
 Region 
-ClusterElement::Update()
+DialGuage::Update()
 {
-	// Update our internal state, and flag foreground/background if
-	// any redraws are needed
-
-	// We return any background area that needs to be redrawn
-	return mBackgroundDirtyRegion;
+	//mBackgroundDirtyRegion.AddRect(mBoundingBox);
+	return ClusterElement::Update();
 }	
 
 Region 
-ClusterElement::Draw()
+DialGuage::Draw()
 {
+	int max=360;
+	static int x=0;
+	Point origin;
+	origin.x = mBoundingBox.x + mBoundingBox.w / 2 + 0;
+	origin.y = mBoundingBox.y + mBoundingBox.h / 2 + 0;
 	Region ret = mForegroundDirtyRegion;
-	if (mStateChanged)
+	if (true || mStateChanged)
 	{
 		// Our state has changed, so redraw everything
-		mGfx.GradientRectangle(mGradientAngle, mGradientStops);
+		Color32 color;
+		color.a = eOpaque;
+		color.r = 255;
+		color.g = color.b = 255;
+		//memset(mGfx.GetSelectedFramebuffer(), 0, mGfx.GetFramebufferProperties().mStride * mGfx.GetFramebufferProperties().mGeometry.h);
+		//mGfx.DrawLine(color, x, 0, 360-x, 360);
+		mGfx.DrawTrapezoid(color, origin, x, 130, 150, 45, true);
+		x += 90;
+		if (x > 360)
+		{
+			x = x % 360;
+		}
+		Sleep(10);
 		mStateChanged = false;
+		Invalidate(mBoundingBox);
 	}
-	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
-	{
-		// Copy the affected region to the primary surface
-		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects());
-	}
+	//if (!mForegroundDirtyRegion.GetDirtyRects().empty())
+	//{
+	//	// Copy the affected region to the primary surface
+	//	mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects());
+	//}
 	// Clear our dirty regions since it is assumed we have drawn everything we are going to draw
 	mForegroundDirtyRegion.Clear();
 	mBackgroundDirtyRegion.Clear();

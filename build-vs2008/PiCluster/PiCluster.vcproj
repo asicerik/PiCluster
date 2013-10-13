@@ -176,6 +176,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\source\DialGuage.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\GraphicsShim.cpp"
 				>
 			</File>
@@ -212,6 +216,10 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath="..\..\source\Trig.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\uart0.cpp"
 				>
 			</File>
@@ -223,6 +231,10 @@
 			>
 			<File
 				RelativePath="..\..\source\ClusterElement.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\DialGuage.h"
 				>
 			</File>
 			<File
@@ -255,6 +267,10 @@
 			</File>
 			<File
 				RelativePath=".\targetver.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\Trig.h"
 				>
 			</File>
 			<File

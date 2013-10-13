@@ -75,11 +75,11 @@ ClusterElement::SetLocation(const Point& loc)
 	// Invalidate the foreground for the new location
 	mForegroundDirtyRegion.Clear();
 	mForegroundDirtyRegion.AddRect(mBoundingBox);
-	UartPrintf("mBoundingBox = %d,%d - %d,%d\n",
-			mBoundingBox.x,
-			mBoundingBox.y,
-			mBoundingBox.w,
-			mBoundingBox.h);
+//	UartPrintf("mBoundingBox = %d,%d - %d,%d\n",
+//			mBoundingBox.x,
+//			mBoundingBox.y,
+//			mBoundingBox.w,
+//			mBoundingBox.h);
 }
 
 void 
@@ -87,16 +87,16 @@ ClusterElement::Invalidate(const Rect& box)
 {
 	Region boxRegion(box);
 	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, boxRegion, Region::eOr);
-	UartPrintf("Invalidate(Rect) : box = %d,%d - %d,%d, dirty = %d,%d - %d,%d\n",
-			mBoundingBox.x,
-			mBoundingBox.y,
-			mBoundingBox.w,
-			mBoundingBox.h,
-			mForegroundDirtyRegion.GetDirtyRect().x,
-			mForegroundDirtyRegion.GetDirtyRect().y,
-			mForegroundDirtyRegion.GetDirtyRect().w,
-			mForegroundDirtyRegion.GetDirtyRect().h
-			);
+//	UartPrintf("Invalidate(Rect) : box = %d,%d - %d,%d, dirty = %d,%d - %d,%d\n",
+//			mBoundingBox.x,
+//			mBoundingBox.y,
+//			mBoundingBox.w,
+//			mBoundingBox.h,
+//			mForegroundDirtyRegion.GetDirtyRect().x,
+//			mForegroundDirtyRegion.GetDirtyRect().y,
+//			mForegroundDirtyRegion.GetDirtyRect().w,
+//			mForegroundDirtyRegion.GetDirtyRect().h
+//			);
 
 }
 
@@ -104,12 +104,12 @@ void
 ClusterElement::Invalidate(const Region& region)
 {
 	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, (Region&)region, Region::eOr);
-	UartPrintf("Invalidate(Region) : dirty = %d,%d - %d,%d\n",
-			mForegroundDirtyRegion.GetDirtyRect().x,
-			mForegroundDirtyRegion.GetDirtyRect().y,
-			mForegroundDirtyRegion.GetDirtyRect().w,
-			mForegroundDirtyRegion.GetDirtyRect().h
-			);
+//	UartPrintf("Invalidate(Region) : dirty = %d,%d - %d,%d\n",
+//			mForegroundDirtyRegion.GetDirtyRect().x,
+//			mForegroundDirtyRegion.GetDirtyRect().y,
+//			mForegroundDirtyRegion.GetDirtyRect().w,
+//			mForegroundDirtyRegion.GetDirtyRect().h
+//			);
 }
 
 Region 

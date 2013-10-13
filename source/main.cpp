@@ -18,15 +18,15 @@ int main(int argc, char** argv)
 
 	UartInit();
 
-	int i=5;
-	while (i-- > 0)
-	{
-		UartPrintf("read=%x, st[0]=%x, st[1]=%x, st[2]=%x, st[3]=%x\n", (uint32_t)(bcm2835_st_read() & 0xffffffff), bcm2835_st[0], bcm2835_st[1], bcm2835_st[2], bcm2835_st[3]);
-		bcm2835_gpio_clr(16);
-		bcm2835_st_delay(bcm2835_st_read(), 500000);
-		bcm2835_gpio_set(16);
-		bcm2835_st_delay(bcm2835_st_read(), 500000);
-	}
+//	int i=5;
+//	while (i-- > 0)
+//	{
+//		UartPrintf("read=%x, st[0]=%x, st[1]=%x, st[2]=%x, st[3]=%x\n", (uint32_t)(bcm2835_st_read() & 0xffffffff), bcm2835_st[0], bcm2835_st[1], bcm2835_st[2], bcm2835_st[3]);
+//		bcm2835_gpio_clr(16);
+//		bcm2835_st_delay(bcm2835_st_read(), 500000);
+//		bcm2835_gpio_set(16);
+//		bcm2835_st_delay(bcm2835_st_read(), 500000);
+//	}
 	InstrumentCluster cluster;
 	GraphicsContextPi ctx;
 	FramebufferProperties properties;
@@ -43,10 +43,10 @@ int main(int argc, char** argv)
 		bool on = true;
 		while (1)
 		{
-			if (on)
-				bcm2835_gpio_clr(16);
-			else
-				bcm2835_gpio_set(16);
+//			if (on)
+//				bcm2835_gpio_clr(16);
+//			else
+//				bcm2835_gpio_set(16);
 
 			//UartPrintf("Calling cluster.Update()\n");
 			//bcm2835_st_delay(bcm2835_st_read(), 500000);

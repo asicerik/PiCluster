@@ -1,6 +1,8 @@
 #include "stdint.h"
 #include "stdlib.h"
+#include "string.h"
 #include "malloc.h"
+#include "Trig.h"
 #include <cstddef>
 #ifdef WIN32
 #include "windows.h"
@@ -132,16 +134,16 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects)
 	if (!mPrimaryContext)
 		return;
 
-	UartPrintf("CopyToPrimary: w=%d,h=%d,stride=%d,ptr=%p,pw=%d,ph=%d,pstride=%d,pptr=%p\n",
-			mFBProperties.mGeometry.w,
-			mFBProperties.mGeometry.h,
-			mFBProperties.mStride,
-			mCurrBufferPtr,
-			mPrimaryContext->GetFramebufferProperties().mGeometry.w,
-			mPrimaryContext->GetFramebufferProperties().mGeometry.h,
-			mPrimaryContext->GetFramebufferProperties().mStride,
-			mPrimaryContext->GetSelectedFramebuffer()
-	);
+//	UartPrintf("CopyToPrimary: w=%d,h=%d,stride=%d,ptr=%p,pw=%d,ph=%d,pstride=%d,pptr=%p\n",
+//			mFBProperties.mGeometry.w,
+//			mFBProperties.mGeometry.h,
+//			mFBProperties.mStride,
+//			mCurrBufferPtr,
+//			mPrimaryContext->GetFramebufferProperties().mGeometry.w,
+//			mPrimaryContext->GetFramebufferProperties().mGeometry.h,
+//			mPrimaryContext->GetFramebufferProperties().mStride,
+//			mPrimaryContext->GetSelectedFramebuffer()
+//	);
 
 	std::vector<Rect>::iterator iter = rects.begin();
 	for (; iter != rects.end(); iter++)
@@ -156,30 +158,27 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects)
 		srcW = Clip(srcW, 0, mFBProperties.mGeometry.w);
 		srcW = Clip(srcW, 0, iter->w);
 
-		UartPrintf("CopyToPrimary: srcW=%d, srcH=%d, iter->w=%d, iter->h=%d\n", srcW, srcH, iter->w, iter->h);
+//		UartPrintf("CopyToPrimary: srcW=%d, srcH=%d, iter->w=%d, iter->h=%d\n", srcW, srcH, iter->w, iter->h);
 
 		// Now check the destination buffer
 		int16_t dstH = iter->y + srcH;
 		dstH = Clip(dstH, 0, mPrimaryContext->GetFramebufferProperties().mGeometry.h);
 		int16_t dstW = iter->x + srcW;
 		dstW = Clip(dstW, 0, mPrimaryContext->GetFramebufferProperties().mGeometry.w);
-		UartPrintf("CopyToPrimary: dstW=%d, dstH=%d\n", dstW, dstH);
+//		UartPrintf("CopyToPrimary: dstW=%d, dstH=%d\n", dstW, dstH);
 
 		int16_t h = ((iter->y + srcH) < dstH) ? (iter->y + srcH) : dstH;
 		int16_t w = ((iter->x + srcW) < dstW) ? (iter->x + srcW) : dstW;
 
-		UartPrintf("CopyToPrimary: offset=%d,%d, iter->y=%d, h=%d, iter->x=%d, w=%d, stride=%d\n",
-			mOffset.x, mOffset.y,
-			iter->y, h, iter->x, w, mFBProperties.mStride);
+//		UartPrintf("CopyToPrimary: offset=%d,%d, iter->y=%d, h=%d, iter->x=%d, w=%d, stride=%d\n",
+//			mOffset.x, mOffset.y,
+//			iter->y, h, iter->x, w, mFBProperties.mStride);
 		for (int16_t y = iter->y; y < (h); y++)
 		{
 			Color32* src = mCurrBufferPtr + srcX + (srcY) * (mFBProperties.mStride >> 2);
 			Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + iter->x + y * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
 			//UartPrintf("CopyToPrimary: src=%p, dst=%p\n", src,dst);
-			for (int16_t x = iter->x; x < (w); x++)
-			{
-				*dst++ = *src++;
-			}
+			memcpy(dst, src, w * 4);
 			srcY++;
 			if (srcY >= mFBProperties.mGeometry.h)
 				break;
@@ -210,9 +209,6 @@ GraphicsContextBase::GradientLine(Color32 startColor, Color32f colorDelta, int16
 		for (int16_t x=startX; x<=endX; x++)
 		{
 			*ptr++ = startColor;
-//#ifdef WIN32
-//			//Sleep(0);
-//#endif
 		}
 	}
 	else
@@ -220,10 +216,243 @@ GraphicsContextBase::GradientLine(Color32 startColor, Color32f colorDelta, int16
 		for (int16_t x=startX; x<=endX; x++)
 		{
 			*ptr++ = currColor.ToColor32();
-//#ifdef WIN32
-//			//Sleep(0);
-//#endif
 		}
+	}
+}
+
+void
+GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1) 
+{
+	int16_t dummy;
+	DrawLine(color, x0, y0, x1, y1, NULL, dummy);
+}
+
+void
+GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
+							  Point* points, int16_t& pointsSize)
+{
+	const int8_t scale = 8;
+	FramebufferProperties props = GetSelectedSurface()->GetFramebufferProperties();
+
+	x0 = Clip(x0, props.mGeometry.x, props.mGeometry.x + props.mGeometry.w);
+	x1 = Clip(x1, props.mGeometry.x, props.mGeometry.x + props.mGeometry.w);
+	y0 = Clip(y0, props.mGeometry.y, props.mGeometry.y + props.mGeometry.h);
+	y1 = Clip(y1, props.mGeometry.y, props.mGeometry.y + props.mGeometry.h);
+	
+	int16_t stepX = x1 - x0;
+	int16_t stepY = y1 - y0;
+	int16_t steps;
+	if ((stepX >= 0) && (stepY >= 0))
+		steps = (stepX > stepY) ? stepX : stepY;
+	else if ((-stepX > 0) && (stepY > 0))
+		steps = (-stepX > stepY) ? -stepX : stepY;
+	else if ((stepX > 0) && (-stepY > 0))
+		steps = (stepX > -stepY) ? stepX : -stepY;
+	else
+		steps = (-stepX > -stepY) ? -stepX : -stepY;
+	if (steps == 0)
+		return;
+
+	int16_t xDelta = ((x1 - x0) << scale) / steps;
+	int16_t yDelta = ((y1 - y0) << scale) / steps;
+	int32_t x = x0 << scale;
+	int32_t y = y0 << scale;
+	int16_t savedPoints = 0;
+	for (int16_t s=0;s<steps;s++)
+	{
+		Color32* ptr = mCurrBufferPtr + (x >> scale) + ((y >> scale) * props.mStride/4);
+		if (points && savedPoints < pointsSize)
+		{
+			points->x = (int16_t)(x >> scale);
+			points->y = (int16_t)(y >> scale);
+			points++;
+			savedPoints++;
+		}
+		*ptr = color;
+		x += xDelta;
+		y += yDelta;
+		//Sleep(0);
+	}
+	if (points)
+		pointsSize = savedPoints;
+}
+
+void
+GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, int16_t innerRadius, 
+								   int16_t outerRadius, int16_t arc, bool fill)
+{
+	// We need to calculate four points
+	// We subtract half the arc at the inner radius for point 0
+	// We subtract half the arc at the outer radius for point 1
+	// We add half the arc at the outer radius for point 2
+	// We add half the arc at the inner radius for point 3
+	Point p0, p1, p2, p3;
+	int16_t p0ArraySize, p1ArraySize, p2ArraySize, p3ArraySize;
+	p0ArraySize = p1ArraySize = p2ArraySize = p3ArraySize = 2 * (arc + outerRadius - innerRadius);
+	Point* p0Array = new Point[p0ArraySize];
+	Point* p1Array = new Point[p1ArraySize];
+	Point* p2Array = new Point[p2ArraySize];
+	Point* p3Array = new Point[p3ArraySize];
+	
+	int32_t clipped = (int32_t)Trig::ClipAngle(angle - (arc >> 1));
+	p0.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p0.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	
+	p1.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p1.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	
+	// Draw the first segment
+	DrawLine(color, p0.x, p0.y, p1.x, p1.y, p0Array, p0ArraySize);
+
+	// Jump to the outer arc
+	clipped = (int32_t)Trig::ClipAngle(angle + (arc >> 1));
+	p2.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p2.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	
+	// Draw the second segment
+	DrawLine(color, p1.x, p1.y, p2.x, p2.y, p1Array, p1ArraySize);
+	
+	p3.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p3.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	
+	// Draw the third segment
+	DrawLine(color, p2.x, p2.y, p3.x, p3.y, p2Array, p2ArraySize);
+
+	// Draw the fourth and last segment back to the beginning
+	DrawLine(color, p3.x, p3.y, p0.x, p0.y, p3Array, p3ArraySize);
+
+	if (fill)
+	{
+		int16_t startAngle = Trig::ClipAngle(angle - (arc >> 2));
+		int16_t endAngle   = Trig::ClipAngle(angle + (arc >> 2));
+		uint32_t intColor = (uint32_t)*(uint32_t*)&color;
+		
+		if (startAngle >= 0 && startAngle < 90)
+		{
+			Point* curr  = p1Array + 1;
+			int16_t left = p1ArraySize - 1;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else if (startAngle >= 90 && startAngle < 180)
+		{
+			Point* curr  = p0Array + 1;
+			int16_t left = p0ArraySize - 1;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else if (startAngle >= 180 && startAngle < 270)
+		{
+			Point* curr  = p0Array + 0;
+			int16_t left = p0ArraySize - 0;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else
+		{
+			Point* curr  = p0Array + 1;
+			int16_t left = p0ArraySize - 1;
+			FloodFillRight(intColor, curr, left);
+		}
+		
+		if (endAngle >= 0 && endAngle < 90)
+		{
+			Point* curr = p2Array + 0;
+			int16_t left = p2ArraySize - 0;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else if (endAngle >= 90 && endAngle < 179)
+		{
+			Point* curr = p1Array + 0;
+			int16_t left = p1ArraySize - 0;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else if (endAngle >= 179 && endAngle < 270)
+		{
+			Point* curr = p3Array + 1;
+			int16_t left = p3ArraySize - 1;
+			FloodFillLeft(intColor, curr, left);
+		}
+		else
+		{
+			Point* curr = p1Array + 0;
+			int16_t left = p1ArraySize - 0;
+			// We can get an artifact when the start angle causes us to
+			// fill below the angle
+			if (startAngle < 270)
+			{
+				curr++;
+				left--;
+			}
+			FloodFillRight(intColor, curr, left);
+		}
+		
+		
+	}
+	delete [] p0Array;
+	delete [] p1Array;
+	delete [] p2Array;
+	delete [] p3Array;
+}
+
+void
+GraphicsContextBase::FloodFillLeft(uint32_t intColor, Point* start, int16_t arraySize)
+{
+	Point*  curr = start;
+	int16_t left = arraySize;
+	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
+	Color32* base = GetSelectedSurface()->mCurrBufferPtr;
+	int16_t maxFill;
+	while (left--)
+	{
+		int16_t x = curr->x - 1;
+		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
+		if (*ptr != intColor)
+		{
+			maxFill = 2000;
+			while (*ptr != intColor && maxFill--)
+			{
+				*ptr-- = intColor;
+			}
+		}
+		curr++;
+	}
+}
+
+void
+GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arraySize)
+{
+	Point*  curr = start;
+	int16_t left = arraySize;
+	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
+	Color32* base = GetSelectedSurface()->mCurrBufferPtr;
+	int16_t maxFill;
+	while (left--)
+	{
+		int16_t x = curr->x + 1;
+		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
+		if (*ptr != intColor)
+		{
+			maxFill = 2000;
+			while (*ptr != intColor && maxFill--)
+			{
+				*ptr++ = intColor;
+			}
+		}
+		curr++;
+	}
+}
+
+void
+GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startAngle, int16_t endAngle, int16_t radius)
+{
+	int16_t x0, y0, x1, y1;
+	for (int32_t angle = startAngle; angle < endAngle; angle++)
+	{
+		int32_t clipped	= Trig::ClipAngle(angle);
+		x0 = origin.x + (int16_t)((Trig::mCosInt[clipped] * radius) >> Trig::kTrigShift);
+		y0 = origin.y + (int16_t)((Trig::mSinInt[clipped] * radius) >> Trig::kTrigShift);
+		clipped	= Trig::ClipAngle(++angle);
+		x1 = origin.x + (int16_t)((Trig::mCosInt[clipped] * radius) >> Trig::kTrigShift);
+		y1 = origin.y + (int16_t)((Trig::mSinInt[clipped] * radius) >> Trig::kTrigShift);
+		DrawLine(color, x0, y0, x1, y1);
 	}
 }
 
@@ -287,7 +516,7 @@ GraphicsContextWin::AllocateWindowsBitmap(FramebufferProperties& properties, HDC
 
 		// Create the front buffer bitmap
 		bitmap = CreateDIBSection( dc, &info, DIB_RGB_COLORS, (void **)&ptr, NULL, 0 );
-		memset(ptr, 128, info.bmiHeader.biSizeImage);
+		memset(ptr, 0, info.bmiHeader.biSizeImage);
 
 		// Now select the buffer into the device context so that we can use the Windows graphics calls.
 		SelectObject( mDC, bitmap );
@@ -403,7 +632,7 @@ GraphicsContextPi::FillRectangle(Rect rect, Color32 argb)
 {
 }
 
-bool
+bool __attribute__((optimize("O0")))
 GraphicsContextPi::CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDesc)
 {
 	bool res = false;
@@ -450,7 +679,7 @@ GraphicsContextPi::CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDe
 	return res;
 }
 
-bool MailboxWrite(uintptr_t message, enum VideoCoreChannel channel)
+bool __attribute__((optimize("O0"))) MailboxWrite(uintptr_t message, enum VideoCoreChannel channel)
 {
 	bool res = false;
 //	UartPrintf("VideoCoreMailboxPeek is %p\n", VideoCoreMailboxPeek);
@@ -485,7 +714,7 @@ bool MailboxWrite(uintptr_t message, enum VideoCoreChannel channel)
 	return res;
 }
 
-bool MailboxRead(uintptr_t& message, enum VideoCoreChannel channel)
+bool __attribute__((optimize("O0"))) MailboxRead(uintptr_t& message, enum VideoCoreChannel channel)
 {
 	bool res = false;
 	do

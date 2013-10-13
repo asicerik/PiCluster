@@ -137,6 +137,12 @@ public:
 	virtual void	CopyToPrimary(std::vector<Rect> rects);
 	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
 	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1);
+	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1,
+							 Point* points, int16_t& pointsSize);
+	virtual void	DrawTrapezoid(Color32 color, Point origin, int16_t angle, int16_t innerRadius, 
+								  int16_t outerRadius, int16_t arc, bool fill);
+	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngle, int16_t endAngle, int16_t radius);
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
 
@@ -150,6 +156,9 @@ public:
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
 
 protected:
+	virtual void	FloodFillLeft(uint32_t intColor, Point* start, int16_t arraySize);
+	virtual void	FloodFillRight(uint32_t intColor, Point* start, int16_t arraySize);
+
 	static GraphicsContextBase*	mPrimaryContext;	//!< Pointer to the primary surface
 	GraphicsContextBase*	mSelectedSurface;		//!< Pointer to the drawing surface
 	SurfaceSelection		mSurfaceSelection;		//!< Which surface are we drawing to?
