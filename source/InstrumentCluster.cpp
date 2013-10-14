@@ -57,15 +57,22 @@ InstrumentCluster::Init(const Rect& box)
 		box.x = box.y = 0;
 		box.w = box.h = 360;
 		Point point;
-		point.x = 0;
-		point.y = 0;
+		point.x = 200;
+		point.y = 50;
 
 		mSpeedo.Init(box);
 		mSpeedo.SetLocation(point);
-
-		//// Draw directly to the screen
+		// Draw directly to the screen
 		mSpeedo.GetGraphicsContext().SelectSurface(ePrimaryFront);
 		mElements.push_back(&mSpeedo);
+		
+		point.x = 1280 - 200 - box.w;
+		point.y = 50;
+		mTach.Init(box);
+		mTach.SetLocation(point);
+		// Draw directly to the screen
+		mTach.GetGraphicsContext().SelectSurface(ePrimaryFront);
+		mElements.push_back(&mTach);
 
 		res = true;
 	} while (false);

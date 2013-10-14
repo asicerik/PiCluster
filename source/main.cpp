@@ -37,16 +37,16 @@ int main(int argc, char** argv)
 	if (true)
 	{
 		UartPrintf("Calling cluster.Init()\n");
-		bcm2835_st_delay(bcm2835_st_read(), 500000);
+		//bcm2835_st_delay(bcm2835_st_read(), 500000);
 		cluster.Init(properties.mGeometry);
 		cluster.GetPrimarySurface().Invalidate(properties.mGeometry);
 		bool on = true;
 		while (1)
 		{
-//			if (on)
-//				bcm2835_gpio_clr(16);
-//			else
-//				bcm2835_gpio_set(16);
+			if (on)
+				bcm2835_gpio_clr(16);
+			else
+				bcm2835_gpio_set(16);
 
 			//UartPrintf("Calling cluster.Update()\n");
 			//bcm2835_st_delay(bcm2835_st_read(), 500000);

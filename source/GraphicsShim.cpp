@@ -278,8 +278,8 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 }
 
 void
-GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, int16_t innerRadius, 
-								   int16_t outerRadius, int16_t arc, bool fill)
+GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWide, int16_t innerRadius, 
+								   int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill)
 {
 	// We need to calculate four points
 	// We subtract half the arc at the inner radius for point 0
@@ -288,32 +288,34 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, i
 	// We add half the arc at the inner radius for point 3
 	Point p0, p1, p2, p3;
 	int16_t p0ArraySize, p1ArraySize, p2ArraySize, p3ArraySize;
-	p0ArraySize = p1ArraySize = p2ArraySize = p3ArraySize = 2 * (arc + outerRadius - innerRadius);
+	p0ArraySize = p1ArraySize = p2ArraySize = p3ArraySize = (int16_t)((startArcWide + endArcWide) >> 3) + 2 * (outerRadius - innerRadius);
 	Point* p0Array = new Point[p0ArraySize];
 	Point* p1Array = new Point[p1ArraySize];
 	Point* p2Array = new Point[p2ArraySize];
 	Point* p3Array = new Point[p3ArraySize];
 	
-	int32_t clipped = (int32_t)Trig::ClipAngle(angle - (arc >> 1));
-	p0.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
-	p0.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
+	p0.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p0.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
-	p1.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
-	p1.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	clipped = (int32_t)Trig::ClipWideDegree(angleWide - (endArcWide >> 1));
+	p1.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p1.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the first segment
 	DrawLine(color, p0.x, p0.y, p1.x, p1.y, p0Array, p0ArraySize);
 
 	// Jump to the outer arc
-	clipped = (int32_t)Trig::ClipAngle(angle + (arc >> 1));
-	p2.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
-	p2.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	clipped = (int32_t)Trig::ClipWideDegree(angleWide + (endArcWide >> 1));
+	p2.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p2.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the second segment
 	DrawLine(color, p1.x, p1.y, p2.x, p2.y, p1Array, p1ArraySize);
 	
-	p3.x = origin.x + (int16_t)((Trig::mSinInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
-	p3.y = origin.y + (int16_t)((-Trig::mCosInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	clipped = (int32_t)Trig::ClipWideDegree(angleWide + (startArcWide >> 1));
+	p3.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
+	p3.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the third segment
 	DrawLine(color, p2.x, p2.y, p3.x, p3.y, p2Array, p2ArraySize);
@@ -323,23 +325,23 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, i
 
 	if (fill)
 	{
-		int16_t startAngle = Trig::ClipAngle(angle - (arc >> 2));
-		int16_t endAngle   = Trig::ClipAngle(angle + (arc >> 2));
+		int32_t startAngle = Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
+		int32_t endAngle   = Trig::ClipWideDegree(angleWide + (startArcWide >> 1));
 		uint32_t intColor = (uint32_t)*(uint32_t*)&color;
 		
-		if (startAngle >= 0 && startAngle < 90)
+		if (startAngle >= 0 && startAngle < 360)
 		{
 			Point* curr  = p1Array + 1;
 			int16_t left = p1ArraySize - 1;
 			FloodFillLeft(intColor, curr, left);
 		}
-		else if (startAngle >= 90 && startAngle < 180)
+		else if (startAngle >= 360 && startAngle < 720)
 		{
 			Point* curr  = p0Array + 1;
 			int16_t left = p0ArraySize - 1;
 			FloodFillLeft(intColor, curr, left);
 		}
-		else if (startAngle >= 180 && startAngle < 270)
+		else if (startAngle >= 720 && startAngle < 1080)
 		{
 			Point* curr  = p0Array + 0;
 			int16_t left = p0ArraySize - 0;
@@ -352,19 +354,19 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, i
 			FloodFillRight(intColor, curr, left);
 		}
 		
-		if (endAngle >= 0 && endAngle < 90)
+		if (endAngle >= 0 && endAngle < 360)
 		{
 			Point* curr = p2Array + 0;
 			int16_t left = p2ArraySize - 0;
 			FloodFillLeft(intColor, curr, left);
 		}
-		else if (endAngle >= 90 && endAngle < 179)
+		else if (endAngle >= 360 && endAngle < 719)
 		{
 			Point* curr = p1Array + 0;
 			int16_t left = p1ArraySize - 0;
 			FloodFillLeft(intColor, curr, left);
 		}
-		else if (endAngle >= 179 && endAngle < 270)
+		else if (endAngle >= 719 && endAngle < 1080)
 		{
 			Point* curr = p3Array + 1;
 			int16_t left = p3ArraySize - 1;
@@ -376,7 +378,7 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int16_t angle, i
 			int16_t left = p1ArraySize - 0;
 			// We can get an artifact when the start angle causes us to
 			// fill below the angle
-			if (startAngle < 270)
+			if (startAngle < 1080)
 			{
 				curr++;
 				left--;
@@ -406,7 +408,7 @@ GraphicsContextBase::FloodFillLeft(uint32_t intColor, Point* start, int16_t arra
 		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
 		if (*ptr != intColor)
 		{
-			maxFill = 2000;
+			maxFill = 200;
 			while (*ptr != intColor && maxFill--)
 			{
 				*ptr-- = intColor;
@@ -430,7 +432,7 @@ GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arr
 		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
 		if (*ptr != intColor)
 		{
-			maxFill = 2000;
+			maxFill = 200;
 			while (*ptr != intColor && maxFill--)
 			{
 				*ptr++ = intColor;
@@ -441,17 +443,17 @@ GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arr
 }
 
 void
-GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startAngle, int16_t endAngle, int16_t radius)
+GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startWideAngle, int16_t endWideAngle, int16_t radius)
 {
 	int16_t x0, y0, x1, y1;
-	for (int32_t angle = startAngle; angle < endAngle; angle++)
+	for (int32_t angle = startWideAngle; angle < endWideAngle; angle++)
 	{
-		int32_t clipped	= Trig::ClipAngle(angle);
-		x0 = origin.x + (int16_t)((Trig::mCosInt[clipped] * radius) >> Trig::kTrigShift);
-		y0 = origin.y + (int16_t)((Trig::mSinInt[clipped] * radius) >> Trig::kTrigShift);
-		clipped	= Trig::ClipAngle(++angle);
-		x1 = origin.x + (int16_t)((Trig::mCosInt[clipped] * radius) >> Trig::kTrigShift);
-		y1 = origin.y + (int16_t)((Trig::mSinInt[clipped] * radius) >> Trig::kTrigShift);
+		int32_t clipped	= Trig::ClipWideDegree(angle);
+		x0 = origin.x + (int16_t)((Trig::mCosWideInt[clipped] * radius) >> Trig::kTrigShift);
+		y0 = origin.y + (int16_t)((Trig::mSinWideInt[clipped] * radius) >> Trig::kTrigShift);
+		clipped	= Trig::ClipWideDegree(++angle);
+		x1 = origin.x + (int16_t)((Trig::mCosWideInt[clipped] * radius) >> Trig::kTrigShift);
+		y1 = origin.y + (int16_t)((Trig::mSinWideInt[clipped] * radius) >> Trig::kTrigShift);
 		DrawLine(color, x0, y0, x1, y1);
 	}
 }

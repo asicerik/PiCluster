@@ -140,9 +140,9 @@ public:
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1);
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1,
 							 Point* points, int16_t& pointsSize);
-	virtual void	DrawTrapezoid(Color32 color, Point origin, int16_t angle, int16_t innerRadius, 
-								  int16_t outerRadius, int16_t arc, bool fill);
-	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngle, int16_t endAngle, int16_t radius);
+	virtual void	DrawTrapezoid(Color32 color, Point origin, int32_t angleWide, int16_t innerRadius, 
+								  int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill);
+	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngleWide, int16_t endAngleWide, int16_t radius);
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
 

@@ -18,6 +18,11 @@ public:
 	virtual Region Update();
 	virtual Region Draw();
 protected:
+	void DrawEmboss(Color32 colorMax, Point origin, int16_t innerRadius, int16_t outerRadius, 
+					int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide);
+	void DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t outerRadius, 
+				   int32_t startAngleWide, int32_t endAngleWide, int32_t minorTickWide, int32_t majorTickWide);
+
 };
 
 

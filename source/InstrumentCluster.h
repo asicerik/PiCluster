@@ -22,6 +22,7 @@ protected:
 	ClusterElement	mBackground;					//!< Background image
 	ClusterElement	mTest;
 	DialGuage		mSpeedo;						//!< Speedometer
+	DialGuage		mTach;							//!< Tachometer
 
 	std::vector<ClusterElement*>	mElements;		//!< All the elements are also stored here for easy traversal
 	Rect							mExtents;		//!< The bounding box for our instrument cluster

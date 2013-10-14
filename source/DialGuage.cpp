@@ -10,6 +10,7 @@
 #include "GraphicsShim.h"
 #include "ClusterElement.h"
 #include "DialGuage.h"
+#include "Trig.h"
 
 DialGuage::DialGuage()
 {
@@ -32,28 +33,28 @@ DialGuage::Update()
 Region 
 DialGuage::Draw()
 {
-	int max=360;
+	int max=1440;
 	static int x=0;
 	Point origin;
-	origin.x = mBoundingBox.x + mBoundingBox.w / 2 + 0;
-	origin.y = mBoundingBox.y + mBoundingBox.h / 2 + 0;
+	origin.x = mBoundingBox.x + mBoundingBox.w / 2;
+	origin.y = mBoundingBox.y + mBoundingBox.h / 2;
 	Region ret = mForegroundDirtyRegion;
 	if (true || mStateChanged)
 	{
 		// Our state has changed, so redraw everything
 		Color32 color;
 		color.a = eOpaque;
-		color.r = 255;
-		color.g = color.b = 255;
-		//memset(mGfx.GetSelectedFramebuffer(), 0, mGfx.GetFramebufferProperties().mStride * mGfx.GetFramebufferProperties().mGeometry.h);
-		//mGfx.DrawLine(color, x, 0, 360-x, 360);
-		mGfx.DrawTrapezoid(color, origin, x, 130, 150, 45, true);
-		x += 90;
-		if (x > 360)
-		{
-			x = x % 360;
-		}
-		Sleep(10);
+		color.r = 0;
+		color.g = 0;
+		color.b = 255;
+		DrawEmboss(color, origin, mBoundingBox.w / 2 - 15, mBoundingBox.w / 2, 0, 1440, 600);
+		color.r = color.g = color.b = 200;
+		DrawTicks(color, origin, mBoundingBox.w / 2 - 30, mBoundingBox.w / 2 - 15, -480, 480, 30, 120);
+		color.r = color.g = color.b = 230;
+		mGfx.DrawTrapezoid(color, origin, -480, 30, mBoundingBox.w / 2 - 35, 36, 4, true);
+		color.r = color.g = color.b = 255;
+		DrawEmboss(color, origin, 25, 30, 0, 1440, 1320);
+
 		mStateChanged = false;
 		Invalidate(mBoundingBox);
 	}
@@ -67,5 +68,46 @@ DialGuage::Draw()
 	mBackgroundDirtyRegion.Clear();
 	return ret;
 }	
+
+void 
+DialGuage::DrawEmboss(Color32 colorMax, Point origin, int16_t innerRadius, int16_t outerRadius, 
+					  int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide)
+{
+	const int32_t stepAngleWide = 20;		// 20 wide = 5 degrees
+	Color32 color;
+	color.a = eOpaque;
+	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide += stepAngleWide)
+	{
+		int32_t offset = Trig::ClipWideDegree(angleWide - peakAngleWide);
+		int32_t shift  = offset < 720 ? (720 - offset) : (offset - 720);
+		color.r = (uint8_t)(colorMax.r * shift / 720);
+		color.g = (uint8_t)(colorMax.g * shift / 720);
+		color.b = (uint8_t)(colorMax.b * shift / 720);
+		mGfx.DrawTrapezoid(color, origin, angleWide + stepAngleWide/2, innerRadius, outerRadius, 
+			stepAngleWide, stepAngleWide, true);
+	}
+}
+
+void 
+DialGuage::DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t outerRadius, 
+					 int32_t startAngleWide, int32_t endAngleWide, int32_t minorTickWide, int32_t majorTickWide)
+{
+	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide ++)
+	{
+		if (((angleWide - startAngleWide) % majorTickWide) == 0)
+			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius, outerRadius, 
+				4, 4, true);
+		else if (((angleWide - startAngleWide) % minorTickWide) == 0)
+			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius + (outerRadius-innerRadius)/2, outerRadius, 
+				2, 2, true);
+	}
+}
+
+
+
+
+
+
+
 
 
