@@ -4,6 +4,7 @@
 #include "malloc.h"
 #include "Trig.h"
 #include <cstddef>
+#include <list>
 #ifdef WIN32
 #include "windows.h"
 #endif
@@ -182,6 +183,10 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects)
 			srcY++;
 			if (srcY >= mFBProperties.mGeometry.h)
 				break;
+#ifdef WIN32
+			if ((y % 8) == 0)
+				Sleep(1);
+#endif
 		}
 	}
 }
@@ -232,13 +237,14 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 							  Point* points, int16_t& pointsSize)
 {
 	const int8_t scale = 8;
+	const int32_t divisor = 1 << scale;
 	FramebufferProperties props = GetSelectedSurface()->GetFramebufferProperties();
 
 	x0 = Clip(x0, props.mGeometry.x, props.mGeometry.x + props.mGeometry.w);
 	x1 = Clip(x1, props.mGeometry.x, props.mGeometry.x + props.mGeometry.w);
 	y0 = Clip(y0, props.mGeometry.y, props.mGeometry.y + props.mGeometry.h);
 	y1 = Clip(y1, props.mGeometry.y, props.mGeometry.y + props.mGeometry.h);
-	
+
 	int16_t stepX = x1 - x0;
 	int16_t stepY = y1 - y0;
 	int16_t steps;
@@ -260,11 +266,11 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 	int16_t savedPoints = 0;
 	for (int16_t s=0;s<steps;s++)
 	{
-		Color32* ptr = mCurrBufferPtr + (x >> scale) + ((y >> scale) * props.mStride/4);
+		Color32* ptr = mCurrBufferPtr + ((x + 128) >> scale) + (((y + 128) >> scale) * props.mStride/4);
 		if (points && savedPoints < pointsSize)
 		{
-			points->x = (int16_t)(x >> scale);
-			points->y = (int16_t)(y >> scale);
+			points->x = (int16_t)((x + 128) >> scale);
+			points->y = (int16_t)((y + 128) >> scale);
 			points++;
 			savedPoints++;
 		}
@@ -325,73 +331,141 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 
 	if (fill)
 	{
-		int32_t startAngle = Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
-		int32_t endAngle   = Trig::ClipWideDegree(angleWide + (startArcWide >> 1));
-		uint32_t intColor = (uint32_t)*(uint32_t*)&color;
-		
-		if (startAngle >= 0 && startAngle < 360)
+		uint32_t colorInt = *((uint32_t*)&color);
+#if FLOOD
+		int16_t x = (p0.x + p1.x + p2.x + p3.x) / 4;
+		int16_t y = (p0.y + p1.y + p2.y + p3.y) / 4;
+		FloodFill(x, y, colorInt, colorInt);
+#else
+		if (p0.x <= p1.x)
 		{
-			Point* curr  = p1Array + 1;
-			int16_t left = p1ArraySize - 1;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else if (startAngle >= 360 && startAngle < 720)
-		{
-			Point* curr  = p0Array + 1;
-			int16_t left = p0ArraySize - 1;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else if (startAngle >= 720 && startAngle < 1080)
-		{
-			Point* curr  = p0Array + 0;
-			int16_t left = p0ArraySize - 0;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else
-		{
-			Point* curr  = p0Array + 1;
-			int16_t left = p0ArraySize - 1;
-			FloodFillRight(intColor, curr, left);
-		}
-		
-		if (endAngle >= 0 && endAngle < 360)
-		{
-			Point* curr = p2Array + 0;
-			int16_t left = p2ArraySize - 0;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else if (endAngle >= 360 && endAngle < 719)
-		{
-			Point* curr = p1Array + 0;
-			int16_t left = p1ArraySize - 0;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else if (endAngle >= 719 && endAngle < 1080)
-		{
-			Point* curr = p3Array + 1;
-			int16_t left = p3ArraySize - 1;
-			FloodFillLeft(intColor, curr, left);
-		}
-		else
-		{
-			Point* curr = p1Array + 0;
-			int16_t left = p1ArraySize - 0;
-			// We can get an artifact when the start angle causes us to
-			// fill below the angle
-			if (startAngle < 1080)
+			if (p0.y > p1.y)
 			{
-				curr++;
-				left--;
+				FloodFillRight(colorInt, p0Array, p0ArraySize);
 			}
-			FloodFillRight(intColor, curr, left);
+			else 
+			{
+				//FloodFillLeft(colorInt, p0Array+1, p0ArraySize-1);
+			}
+			if (p3.y > p0.y)
+			{
+				if (p3.y < p2.y)
+					FloodFillRight(colorInt, p3Array+0, p3ArraySize-0);
+				else
+					FloodFillRight(colorInt, p3Array+1, p3ArraySize-1);
+			}
+			else
+			{
+				//FloodFillLeft(colorInt, p3Array+0, p3ArraySize-0);
+			}
+			if (p2.y > p3.y)
+			{
+				FloodFillRight(colorInt, p2Array+1, p2ArraySize-1);
+			}
+			else
+			{
+				//FloodFillLeft(colorInt, p3Array+1, p3ArraySize-1);
+			}
 		}
-		
-		
+		else
+		{
+			if (p3.y > p2.y)
+			{
+				FloodFillLeft(colorInt, p2Array+1, p2ArraySize-1);
+			}
+			else 
+			{
+				//FloodFillLeft(colorInt, p0Array+1, p0ArraySize-1);
+			}
+			if (p3.y < p0.y)
+			{
+				if (p3.y < p2.y)
+					FloodFillLeft(colorInt, p3Array+1, p3ArraySize-1);
+				else
+					FloodFillLeft(colorInt, p3Array+0, p3ArraySize-0);
+			}
+			else
+			{
+				//FloodFillLeft(colorInt, p3Array+0, p3ArraySize-0);
+			}
+			if (p0.y < p1.y)
+			{
+				FloodFillLeft(colorInt, p0Array+0, p0ArraySize-0);
+			}
+			else
+			{
+				//FloodFillLeft(colorInt, p3Array+1, p3ArraySize-1);
+			}
+		}
+#endif
 	}
 	delete [] p0Array;
 	delete [] p1Array;
 	delete [] p2Array;
 	delete [] p3Array;
+}
+
+void
+GraphicsContextBase::FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor)
+{
+	std::list<Point> nodes;
+	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
+	uint32_t* ptr = (uint32_t*)GetSelectedSurface()->mCurrBufferPtr + x + (y * props.mStride / 4);
+
+	if ((x < props.mGeometry.x) || (x >= (props.mGeometry.x + props.mGeometry.w)) || 
+		(y < props.mGeometry.y) || (y >= (props.mGeometry.y + props.mGeometry.h)))
+		return;
+	if (*ptr == borderColor)
+		return;
+
+	Point point;
+	Point pointAdd;
+	point.x = x;
+	point.y = y;
+	nodes.push_back(point);
+	while (!nodes.empty())// && nodes.size() < 100)
+	{
+		point = nodes.back();
+		nodes.pop_back();
+		ptr = (uint32_t*)GetSelectedSurface()->mCurrBufferPtr + point.x + (point.y * props.mStride / 4);
+		if (*ptr != borderColor)
+		{
+			// Sweep left and right  to find the horizontal edges of the fill area
+			int16_t xMin = point.x;
+			int16_t xMax = point.x;
+			while (xMin >= props.mGeometry.x)
+			{
+				if (*(--ptr) == borderColor)
+					break;
+				xMin--;
+			}
+			ptr = (uint32_t*)GetSelectedSurface()->mCurrBufferPtr + point.x + (point.y * props.mStride / 4);
+			while (xMax < (props.mGeometry.x + props.mGeometry.w))
+			{
+				if (*(++ptr) == borderColor)
+					break;
+				xMax++;
+			}
+			ptr = (uint32_t*)GetSelectedSurface()->mCurrBufferPtr + xMin + (point.y * props.mStride / 4);
+			for (int16_t currX=(xMin+0) ; currX <= xMax ; currX++)
+			{
+				*ptr = fillColor;
+				if (*(ptr - (props.mStride / 4)) != borderColor)
+				{
+					pointAdd.x = currX;
+					pointAdd.y = point.y - 1;
+					nodes.push_back(pointAdd);
+				}
+				if (*(ptr + (props.mStride / 4)) != borderColor)
+				{
+					pointAdd.x = currX;
+					pointAdd.y = point.y + 1;
+					nodes.push_back(pointAdd);
+				}
+				ptr++;
+			}
+		}
+	}
 }
 
 void

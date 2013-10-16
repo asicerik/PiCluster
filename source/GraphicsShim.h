@@ -143,6 +143,7 @@ public:
 	virtual void	DrawTrapezoid(Color32 color, Point origin, int32_t angleWide, int16_t innerRadius, 
 								  int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill);
 	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngleWide, int16_t endAngleWide, int16_t radius);
+	virtual void	FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor);
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
 
@@ -152,6 +153,8 @@ public:
 	Color32*				GetBackBuffer()				{ return mBackBufferPtr; };
 	Color32*				GetFrontBuffer()			{ return mFrontBufferPtr; };
 	void					SetOffset(Point offset)		{ mOffset = offset; };
+	void					SetAntiAlias(bool val)		{ mAntiAlias = val; };
+	bool					GetAntiAlias()				{ return mAntiAlias; };
 
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
 
@@ -168,6 +171,7 @@ protected:
 	FramebufferProperties	mFBProperties;			//!< Properties for this framebuffer
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
 	Point					mOffset;				//!> x/y offset relative to primary surface
+	bool					mAntiAlias;				//!< If true, apply anti-aliasing
 };
 
 #ifdef WIN32

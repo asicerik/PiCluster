@@ -26,15 +26,22 @@ DialGuage::~DialGuage()
 Region 
 DialGuage::Update()
 {
-	//mBackgroundDirtyRegion.AddRect(mBoundingBox);
+	Rect box;
+	box.x = 200;
+	box.y = 50;
+	box.w = 360;
+	box.h = 360;
+	if (true || mStateChanged)
+		mBackgroundDirtyRegion.AddRect(mBoundingBox);
+		//mBackgroundDirtyRegion.AddRect(box);
 	return ClusterElement::Update();
 }	
 
 Region 
 DialGuage::Draw()
 {
-	int max=1440;
-	static int x=0;
+	int max=480;
+	static int x=max;
 	Point origin;
 	origin.x = mBoundingBox.x + mBoundingBox.w / 2;
 	origin.y = mBoundingBox.y + mBoundingBox.h / 2;
@@ -47,16 +54,29 @@ DialGuage::Draw()
 		color.r = 0;
 		color.g = 0;
 		color.b = 255;
-		DrawEmboss(color, origin, mBoundingBox.w / 2 - 15, mBoundingBox.w / 2, 0, 1440, 600);
-		color.r = color.g = color.b = 200;
-		DrawTicks(color, origin, mBoundingBox.w / 2 - 30, mBoundingBox.w / 2 - 15, -480, 480, 30, 120);
+		if (mStateChanged)
+		{
+			DrawEmboss(color, origin, mBoundingBox.w / 2 - 15, mBoundingBox.w / 2, 0, 1440, 600);
+
+			color.r = color.g = color.b = 200;
+			DrawTicks(color, origin, mBoundingBox.w / 2 - 30, mBoundingBox.w / 2 - 15, -480, 480, 30, 120);
+		}
 		color.r = color.g = color.b = 230;
-		mGfx.DrawTrapezoid(color, origin, -480, 30, mBoundingBox.w / 2 - 35, 36, 4, true);
+		mGfx.DrawTrapezoid(color, origin, x, 30, mBoundingBox.w / 2 - 35, 36, 4, true);
+
+		mGfx.SetAntiAlias(false);
 		color.r = color.g = color.b = 255;
 		DrawEmboss(color, origin, 25, 30, 0, 1440, 1320);
 
 		mStateChanged = false;
 		Invalidate(mBoundingBox);
+		x += 16;
+		if (x >= max)
+		{
+			x = -max;
+			mStateChanged = true;
+		}
+		//Sleep(50);
 	}
 	//if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	//{
@@ -97,9 +117,11 @@ DialGuage::DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t o
 		if (((angleWide - startAngleWide) % majorTickWide) == 0)
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius, outerRadius, 
 				4, 4, true);
+//				18, 18, true);
 		else if (((angleWide - startAngleWide) % minorTickWide) == 0)
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius + (outerRadius-innerRadius)/2, outerRadius, 
 				2, 2, true);
+//				14, 14, true);
 	}
 }
 

@@ -72,7 +72,7 @@ InstrumentCluster::Init(const Rect& box)
 		mTach.SetLocation(point);
 		// Draw directly to the screen
 		mTach.GetGraphicsContext().SelectSurface(ePrimaryFront);
-		mElements.push_back(&mTach);
+		//mElements.push_back(&mTach);
 
 		res = true;
 	} while (false);
