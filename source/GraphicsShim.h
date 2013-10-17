@@ -64,6 +64,7 @@ struct Color32
 	uint8_t		r;
 	uint8_t		a;
 	Color32f ToColor32f();
+	Color32	 AlphaBlend(Color32 background);
 };
 #else
 struct Color32
@@ -101,6 +102,38 @@ enum Opacity
 	eOpaque			= 255,
 };
 
+/*
+	AntiAliasEdges are used to decide which edges to apply anti-aliasing to.
+	Sometimes, we may want to turn on/off anti-aliasing for certain edges.
+	Especially on butt joints between polygons.
+*/
+enum AntiAliasEdges
+{
+	eAntiAliasNone		= 0,	// no edges are to be anti-aliased
+	eAntiAliasS0		= 0x1,	// left-side only
+	eAntiAliasS1		= 0x2,	// top only
+	eAntiAliasS2		= 0x4,	// right-side only
+	eAntiAliasS3		= 0x8,	// bottom only
+	eAntiAliasS0S2		= 0x9,	// top/bottom only
+	eAntiAliasS1S3		= 0x6,	// left/right only
+	eAntiAliasS0S1S2S3	= 0xf,	// all four sides
+};
+
+/*
+	AntiAliasLineMode is used to determine the mode used to anti-alias drawn lines.
+	In the simple alpha-reduction mode, we draw the line with single-pixel width,
+	but modulate the alpha channel according to the error from ideal.
+	You need to pick a direction for the alpha blending depending on where the line
+	is relative to filled regions, etc.
+	If you choose the wrong value, you will see hard edges instead of smooth.
+*/
+enum AntiAliasLineMode
+{
+	eAntiAliasLineModeNone		= 0,	// don't apply anti-aliasing to this line
+	eAntiAliasLineModeAlpha1	= 1,	// use anti-aliasing alpha mode 1
+	eAntiAliasLineModeAlpha2	= 2,	// use anti-aliasing alpha mode 2
+};
+
 enum SurfaceSelection
 {
 	eUnknown,
@@ -124,6 +157,28 @@ struct FramebufferProperties
 	bool			mDoubleBuffer;		//!< Allocate a front and back buffer for drawing
 };
 
+/*
+	FontDatabaseFile
+	This file is used to store an anti-aliased font.
+	The only storage is the alpha channel. To write text using this font, you simply 
+	apply this alpha channel to your chosen text color and alpha blend it into your framebuffer.
+*/
+struct PACK FontDatabaseFile
+{
+	uint32_t	fileSize;				//!< Total filesize including this header
+	char		fontName[32];			//!< NULL terminated font name. Max 31 characters
+	uint8_t		fontHeight;				//!< Font height
+	uint8_t		startChar;				//!< First ASCII character in the file (typically 32=space)
+	uint8_t		endChar;				//!< Last ASCII character in the file (typically 126=~)
+	uint8_t		columns;				//!< The number of characters per line
+	uint8_t		rows;					//!< The number of lines
+	uint8_t		cellWidth;				//!< The width of each character cell in the image
+	uint8_t		cellHeight;				//!< The width of each character cell in the image
+	uint8_t		reserved;				//!< For packing
+	uint8_t		alphaArray;				//!< This is actually an array of alpha values. Size = (endChar-startChar)+1
+										//!< 255 = fully opaque. 0 = transparent (background)
+};
+
 class GraphicsContextBase
 {
 public:
@@ -134,16 +189,21 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties) = 0;
 	virtual void	FreeFramebuffer() = 0;
 	virtual void	FillRectangle(Rect rect, Color32 argb) = 0;
-	virtual void	CopyToPrimary(std::vector<Rect> rects);
+	virtual void	CopyToPrimary(std::vector<Rect> rects, bool alphaBlend=false);
 	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
 	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
-	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1);
+	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
+							 AntiAliasLineMode aaMode=eAntiAliasLineModeNone);
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-							 Point* points, int16_t& pointsSize);
+							 Point* points, int16_t& pointsSize, 
+							 AntiAliasLineMode aaMode=eAntiAliasLineModeNone);
 	virtual void	DrawTrapezoid(Color32 color, Point origin, int32_t angleWide, int16_t innerRadius, 
-								  int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill);
+								  int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill,
+								  AntiAliasEdges aaEdges);
 	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngleWide, int16_t endAngleWide, int16_t radius);
 	virtual void	FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor);
+	virtual void	DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color);
+	
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
 
@@ -182,7 +242,7 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
 	virtual void	FreeFramebuffer();
 	virtual void	FillRectangle(Rect rect, Color32 argb);
-	//virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
+	bool			CreateFontDatabase(std::string fontName, int16_t height);
 	Color32* GetBackBuffer();
 	Color32* GetFrontBuffer();
 	HDC GetDC()	{ return mDC; };

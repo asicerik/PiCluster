@@ -16,6 +16,7 @@ public:
 	void Draw();
 	ClusterElement& GetPrimarySurface()	{ return mPrimarySurface; };
 	Region							mDirty;			//!< Region that need to be drawn to screen
+	static GraphicsContext			mFontEras18;	//!< 18 point Eras Demi ITC font
 
 protected:
 	ClusterElement	mPrimarySurface;				//!< This is the surface that is copied to the screen
@@ -24,6 +25,7 @@ protected:
 	DialGuage		mSpeedo;						//!< Speedometer
 	DialGuage		mTach;							//!< Tachometer
 
+	// Fonts
 	std::vector<ClusterElement*>	mElements;		//!< All the elements are also stored here for easy traversal
 	Rect							mExtents;		//!< The bounding box for our instrument cluster
 };

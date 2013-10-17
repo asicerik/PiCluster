@@ -9,6 +9,8 @@
 #include "GraphicsShim.h"
 #include "ClusterElement.h"
 
+extern FontDatabaseFile*	gFontErasDemi18;		// 18 point Eras Demi ITC
+
 /*
   The ClusterElement base class will draw a basic rectangle.
 */

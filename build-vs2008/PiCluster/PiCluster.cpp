@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "PiCluster.h"
+#include "winsock.h"
 
 #define MAX_LOADSTRING 100
 
@@ -10,7 +11,11 @@
 HINSTANCE hInst;								// current instance
 TCHAR szTitle[MAX_LOADSTRING];					// The title bar text
 TCHAR szWindowClass[MAX_LOADSTRING];			// the main window class name
-InstrumentCluster gCluster;						// Our instrument
+InstrumentCluster gCluster;						// Our instrument cluster
+GraphicsContextWin gFontDB;						// Context for generating font info
+
+// Font databases are global
+FontDatabaseFile*	gFontErasDemi18 = NULL;		// 18 point Eras Demi ITC
 
 // Forward declarations of functions included in this code module:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
@@ -121,7 +126,19 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    Rect rect = { 0, 0, 1280, 480 };
    gCluster.Init(rect);
+   gFontDB.CreateFontDatabase("Eras Demi ITC", 18);
 
+   FILE* fp;
+   if (!fopen_s(&fp, "Eras Demi ITC.bin", "rb"))
+   {
+	   // Read the file size
+	   uint32_t fileSize;
+	   fread(&fileSize, 1, 4, fp);
+	   fileSize = ntohl(fileSize);
+	   gFontErasDemi18 = (FontDatabaseFile*)malloc(fileSize);
+	   gFontErasDemi18->fileSize = fileSize;
+	   fread(&gFontErasDemi18->fontName, 1, fileSize - 4, fp);
+   }
    return TRUE;
 }
 
@@ -173,11 +190,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			winRect.right = dirty.x + dirty.w;
 			winRect.bottom= dirty.y + dirty.h;
 			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
+			//StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
 
-			// Draw the region
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
 			SelectObject(hdc, GetStockObject(WHITE_PEN));
-			Rectangle(hdc, winRect.left, winRect.top, winRect.right, winRect.bottom);
+
+			// Draw the region
+			//Rectangle(hdc, winRect.left, winRect.top, winRect.right, winRect.bottom);
 			EndPaint(hWnd, &ps);
 
 			Sleep(1);

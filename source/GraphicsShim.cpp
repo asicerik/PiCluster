@@ -7,11 +7,13 @@
 #include <list>
 #ifdef WIN32
 #include "windows.h"
+#include "winsock.h"
+#include <string>
 #endif
 #include "GraphicsShim.h"
 #include "uart0.h"
 
-GraphicsContextBase*	GraphicsContextBase::mPrimaryContext = NULL;
+GraphicsContextBase*		GraphicsContextBase::mPrimaryContext = NULL;
 
 Color32f 
 Color32::ToColor32f()
@@ -22,6 +24,18 @@ Color32::ToColor32f()
 	out.g = (float)g;
 	out.b = (float)b;
 	return out;
+}
+
+Color32	 
+Color32::AlphaBlend(Color32 background)
+{
+	Color32 ret;
+	uint8_t backgroundAlpha = 255 - a;
+	ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
+	ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
+	ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
+	ret.a = 255;
+	return ret;
 }
 
 Color32 
@@ -130,7 +144,7 @@ GraphicsContextBase::GradientRectangle(int16_t angle, std::vector<GradientStop>&
 }
 
 void
-GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects)
+GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 {
 	if (!mPrimaryContext)
 		return;
@@ -179,7 +193,19 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects)
 			Color32* src = mCurrBufferPtr + srcX + (srcY) * (mFBProperties.mStride >> 2);
 			Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + iter->x + y * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
 			//UartPrintf("CopyToPrimary: src=%p, dst=%p\n", src,dst);
-			memcpy(dst, src, w * 4);
+			if (alphaBlend)
+			{
+				for (int16_t x = iter->x; x < (w); x++)
+				{
+					*dst = src->AlphaBlend(*dst);
+					src++;
+					dst++;
+				}
+			}
+			else
+			{
+				memcpy(dst, src, w * 4);
+			}
 			srcY++;
 			if (srcY >= mFBProperties.mGeometry.h)
 				break;
@@ -226,15 +252,17 @@ GraphicsContextBase::GradientLine(Color32 startColor, Color32f colorDelta, int16
 }
 
 void
-GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1) 
+GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1,
+							  AntiAliasLineMode aaMode) 
 {
 	int16_t dummy;
-	DrawLine(color, x0, y0, x1, y1, NULL, dummy);
+	DrawLine(color, x0, y0, x1, y1, NULL, dummy, aaMode);
 }
 
 void
 GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
-							  Point* points, int16_t& pointsSize)
+							  Point* points, int16_t& pointsSize,
+							  AntiAliasLineMode aaMode)
 {
 	const int8_t scale = 8;
 	const int32_t divisor = 1 << scale;
@@ -274,6 +302,16 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 			points++;
 			savedPoints++;
 		}
+		if (mAntiAlias && aaMode != eAntiAliasLineModeNone)
+		{
+			int16_t errorX = (x + 128) % divisor;
+			int16_t errorY = (y + 128) % divisor;
+			int16_t error = (errorX + errorY) / 2;
+			if (aaMode == eAntiAliasLineModeAlpha1)
+				color.a = Clip(255-error, 0, 255);
+			else if (aaMode == eAntiAliasLineModeAlpha2)
+				color.a = Clip(error, 0, 255);
+		}
 		*ptr = color;
 		x += xDelta;
 		y += yDelta;
@@ -285,8 +323,15 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 
 void
 GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWide, int16_t innerRadius, 
-								   int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill)
+								   int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill,
+								   AntiAliasEdges aaEdges)
 {
+	int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide);
+	bool aaMode1 = ((clipped >= 0) && (clipped < 540)) ? true : 
+		((clipped > 1260) && (clipped < 1440)) ? true : false;
+	bool aaMode2 = ((clipped >= 0) && (clipped < 180)) ? true : 
+		((clipped > 900) && (clipped < 1440)) ? true : false;
+
 	// We need to calculate four points
 	// We subtract half the arc at the inner radius for point 0
 	// We subtract half the arc at the outer radius for point 1
@@ -300,7 +345,7 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	Point* p2Array = new Point[p2ArraySize];
 	Point* p3Array = new Point[p3ArraySize];
 	
-	int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
+	clipped = (int32_t)Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
 	p0.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	p0.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
@@ -309,7 +354,8 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	p1.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the first segment
-	DrawLine(color, p0.x, p0.y, p1.x, p1.y, p0Array, p0ArraySize);
+	DrawLine(color, p0.x, p0.y, p1.x, p1.y, p0Array, p0ArraySize, 
+		(aaEdges & eAntiAliasS0) ? (aaMode1 ? eAntiAliasLineModeAlpha1 : eAntiAliasLineModeAlpha2) : eAntiAliasLineModeNone);
 
 	// Jump to the outer arc
 	clipped = (int32_t)Trig::ClipWideDegree(angleWide + (endArcWide >> 1));
@@ -317,17 +363,20 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	p2.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * outerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the second segment
-	DrawLine(color, p1.x, p1.y, p2.x, p2.y, p1Array, p1ArraySize);
+	DrawLine(color, p1.x, p1.y, p2.x, p2.y, p1Array, p1ArraySize,
+		(aaEdges & eAntiAliasS1) ? (aaMode2 ? eAntiAliasLineModeAlpha1 : eAntiAliasLineModeAlpha2) : eAntiAliasLineModeNone);
 	
 	clipped = (int32_t)Trig::ClipWideDegree(angleWide + (startArcWide >> 1));
 	p3.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	p3.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	
 	// Draw the third segment
-	DrawLine(color, p2.x, p2.y, p3.x, p3.y, p2Array, p2ArraySize);
+	DrawLine(color, p2.x, p2.y, p3.x, p3.y, p2Array, p2ArraySize,
+		(aaEdges & eAntiAliasS2) ? (aaMode1 ? eAntiAliasLineModeAlpha2 : eAntiAliasLineModeAlpha1) : eAntiAliasLineModeNone);
 
 	// Draw the fourth and last segment back to the beginning
-	DrawLine(color, p3.x, p3.y, p0.x, p0.y, p3Array, p3ArraySize);
+	DrawLine(color, p3.x, p3.y, p0.x, p0.y, p3Array, p3ArraySize,
+		(aaEdges & eAntiAliasS3) ? (aaMode2 ? eAntiAliasLineModeAlpha2 : eAntiAliasLineModeAlpha1) : eAntiAliasLineModeNone);
 
 	if (fill)
 	{
@@ -480,13 +529,10 @@ GraphicsContextBase::FloodFillLeft(uint32_t intColor, Point* start, int16_t arra
 	{
 		int16_t x = curr->x - 1;
 		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
-		if (*ptr != intColor)
+		maxFill = 200;
+		while ((*ptr & 0x00ffffff) != (intColor & 0x00ffffff) && maxFill--)
 		{
-			maxFill = 200;
-			while (*ptr != intColor && maxFill--)
-			{
-				*ptr-- = intColor;
-			}
+			*ptr-- = intColor;
 		}
 		curr++;
 	}
@@ -504,13 +550,10 @@ GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arr
 	{
 		int16_t x = curr->x + 1;
 		uint32_t* ptr = (uint32_t*)(base + x + curr->y * props.mStride / 4);
-		if (*ptr != intColor)
+		maxFill = 200;
+		while ((*ptr & 0x00ffffff) != (intColor & 0x00ffffff) && maxFill--)
 		{
-			maxFill = 200;
-			while (*ptr != intColor && maxFill--)
-			{
-				*ptr++ = intColor;
-			}
+			*ptr++ = intColor;
 		}
 		curr++;
 	}
@@ -529,6 +572,46 @@ GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startWideAngle
 		x1 = origin.x + (int16_t)((Trig::mCosWideInt[clipped] * radius) >> Trig::kTrigShift);
 		y1 = origin.y + (int16_t)((Trig::mSinWideInt[clipped] * radius) >> Trig::kTrigShift);
 		DrawLine(color, x0, y0, x1, y1);
+	}
+}
+
+void
+GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color)
+{
+	if (!font)
+		return;
+
+	uint32_t fontStride = font->cellWidth * font->columns;
+	int16_t  width		= font->cellWidth * text.length();
+	int16_t  dstX		= loc.x;
+
+	for (size_t i = 0; i < (uint16_t)text.length(); i++)
+	{
+		uint8_t offset = text[i] - font->startChar;
+		uint8_t* currChar = &font->alphaArray;								// start from the beginning of the array
+		currChar += (offset % font->columns) * font->cellWidth;				// adjust for the column
+		currChar += (offset/font->columns) * font->cellHeight * fontStride;	// adjust for the row
+
+		for (int16_t y = 0; y < (uint16_t)font->cellHeight; y++)
+		{
+			uint8_t* src = currChar + y * fontStride;
+			Color32* dst = mCurrBufferPtr + dstX + (loc.y + y) * (mFBProperties.mStride >> 2);
+			for (int16_t x = 0; x < font->cellWidth; x++)
+			{
+				if (*src)
+				{
+					color.a = *src;
+					*dst = color.AlphaBlend(*dst);
+				}
+				src++;
+				dst++;
+			}
+	#ifdef WIN32
+			if ((y % 8) == 0)
+				Sleep(1);
+	#endif
+		}
+		dstX += font->cellWidth;
 	}
 }
 
@@ -628,6 +711,133 @@ GraphicsContextWin::FillRectangle(Rect rect, Color32 argb)
 	DeleteObject(brush);
 }
 
+bool
+GraphicsContextWin::CreateFontDatabase(std::string fontName, int16_t height)
+{
+	bool res = false;
+	FILE* fp = NULL;
+
+	do 
+	{
+		Color32 black;
+		black.a = eOpaque;
+		black.r = black.g = black.b = 0;
+
+		int16_t columns	= 32;
+		int16_t rows		= 3;
+		int16_t colWidth	= height;		// assume a square font element
+		int16_t rowHeight	= height;
+
+		// Allocate a big bitmap that should have no problem holding our font
+		mFBProperties.mBitsPerPixel = 32;
+		mFBProperties.mDoubleBuffer = false;
+		mFBProperties.mGeometry.x = mFBProperties.mGeometry.y = 0;
+		mFBProperties.mGeometry.w = columns * colWidth;
+		mFBProperties.mGeometry.h = rows    * rowHeight;
+
+		res = AllocateWindowsBitmap(mFBProperties, mDC, mBitmapInfo, mBitmap, mCurrBufferPtr);
+
+		if (!res)
+			break;
+
+		FillRectangle(mFBProperties.mGeometry, black);
+
+		HFONT font = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+			                    CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FF_DONTCARE | DEFAULT_PITCH, L"Eras Demi ITC");
+		
+		SelectObject(mDC, font);
+		SetTextColor(mDC, RGB(255,255,255));
+		SetBkMode(mDC,TRANSPARENT);
+
+		Rect maxSize = { 0,0,0,0 };
+		RECT winRect;
+		SetRect(&winRect, 0, 0, colWidth, rowHeight);
+
+		// Go through the ASCII table, and render each character
+		char startChar = ' ';
+		char endChar = '~';
+		for (char character = startChar; character <= endChar; character++)
+		{
+			DrawTextA(mDC, &character, 1, &winRect, DT_LEFT | DT_BOTTOM);
+
+			SIZE size;
+			GetTextExtentPointA(mDC, &character, 1, &size);
+
+			if ((character % 32) == 31)
+			{
+				if (winRect.right > maxSize.w)
+					maxSize.w = (int16_t)winRect.right;
+
+				winRect.top		+= rowHeight;
+				winRect.bottom	+= rowHeight;
+				winRect.left	= 0;
+				winRect.right	= colWidth;
+			}
+			else
+			{
+				winRect.left	+= colWidth;
+				winRect.right	+= colWidth;
+			}
+		}
+		maxSize.h = (int16_t)winRect.bottom;
+
+		// Now, convert the non-white pixels to their alpha blended equivalents
+		for (int16_t y = 0; y < mFBProperties.mGeometry.h; y++)
+		{
+			for (int16_t x = 0; x < mFBProperties.mGeometry.w; x++)
+			{
+				Color32* ptr = mCurrBufferPtr + x + (y * mFBProperties.mStride / 4);
+				int16_t luma = (ptr->r + ptr->g + ptr->b) / 3;
+				luma = Clip(luma, 0, 255);
+				ptr->r = ptr->g = ptr->b = (uint8_t)(luma == 0 ? 0 : 255);
+				ptr->a = (uint8_t)luma;
+			}
+		}
+
+		// Finally, write the output file
+		std::string filename = fontName + ".bin";
+		if (fopen_s(&fp, filename.c_str(), "wb"))
+			break;
+
+		// Create our database entry
+		size_t dbSize = sizeof(FontDatabaseFile) + maxSize.w * maxSize.h;
+		FontDatabaseFile* db = (FontDatabaseFile*)malloc(dbSize);
+		memset(db, 0, sizeof(FontDatabaseFile));
+		db->fileSize	= ntohl(dbSize);
+		memcpy(&db->fontName, fontName.c_str(), fontName.length());
+		db->fontHeight	= (uint8_t)height;
+		db->startChar	= (uint8_t)startChar;
+		db->endChar		= (uint8_t)endChar;
+		db->columns		= (uint8_t)columns;
+		db->rows		= (uint8_t)rows;
+		db->cellWidth	= (uint8_t)colWidth;
+		db->cellHeight	= (uint8_t)rowHeight;
+
+		// Write out the alpha values
+		uint8_t* dst = &db->alphaArray;
+		for (int16_t y = 0; y < maxSize.h; y++)
+		{
+			for (int16_t x = 0; x < maxSize.w; x++)
+			{
+				Color32* src = mCurrBufferPtr + x + (y * maxSize.w);
+				*dst++ = src->a;
+			}
+		}
+
+		if (fwrite(db, 1, dbSize, fp) != dbSize)
+		{
+			break;
+		}
+		free(db);
+
+		res = true;
+	} while (false);
+
+	if (fp)
+		fclose(fp);
+
+	return res;
+}
 
 #else
 

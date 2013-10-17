@@ -8,6 +8,8 @@
 #include "Trig.h"
 #include "InstrumentCluster.h"
 
+GraphicsContext			InstrumentCluster::mFontEras18;
+
 InstrumentCluster::InstrumentCluster()
 {
 }
@@ -61,9 +63,9 @@ InstrumentCluster::Init(const Rect& box)
 		point.y = 50;
 
 		mSpeedo.Init(box);
-		mSpeedo.SetLocation(point);
+		//mSpeedo.SetLocation(point);
 		// Draw directly to the screen
-		mSpeedo.GetGraphicsContext().SelectSurface(ePrimaryFront);
+		mSpeedo.GetGraphicsContext().SelectSurface(eFront);
 		mElements.push_back(&mSpeedo);
 		
 		point.x = 1280 - 200 - box.w;
