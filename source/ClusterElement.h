@@ -7,7 +7,7 @@ class ClusterElement
 public:
 	ClusterElement();
 	virtual ~ClusterElement();
-	virtual bool Init(const Rect& box, bool isPrimary=false);
+	virtual bool Init(const Rect& box, bool isPrimary=false, bool doubleBuffer=false);
 	virtual void SetVisible(bool visible);
 	virtual void Invalidate(const Rect& box);
 	virtual void Invalidate(const Region& region);
@@ -21,8 +21,9 @@ protected:
 	bool				mVisible;
 	Rect				mBoundingBox;
 	GraphicsContext		mGfx;
-	Region				mForegroundDirtyRegion;
-	Region				mBackgroundDirtyRegion;
+	Region				mForegroundDirtyRegion;		//!< The portion of our foreground that needs to be redrawn
+	Region				mBackgroundDirtyRegion;		//!< The portion of our background that needs to be redrawn
+	Region				mLowerZOrderDirtyRegion;	//!< The portion of the object below us that needs to be redrawn
 	int16_t				mGradientAngle;
 	std::vector<GradientStop>
 						mGradientStops;

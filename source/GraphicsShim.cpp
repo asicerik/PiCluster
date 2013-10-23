@@ -11,6 +11,7 @@
 #include <string>
 #endif
 #include "GraphicsShim.h"
+#include "Region.h"
 #include "uart0.h"
 
 GraphicsContextBase*		GraphicsContextBase::mPrimaryContext = NULL;
@@ -60,7 +61,7 @@ GraphicsContextBase::GraphicsContextBase()
 }
 
 GraphicsContextBase* 
-GraphicsContextBase::SelectSurface(SurfaceSelection selection)
+GraphicsContextBase::SetSurfaceSelection(SurfaceSelection selection)
 {
 	mCurrBufferPtr = NULL;
 	mSelectedSurface = NULL;
@@ -185,6 +186,9 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 		int16_t h = ((iter->y + srcH) < dstH) ? (iter->y + srcH) : dstH;
 		int16_t w = ((iter->x + srcW) < dstW) ? (iter->x + srcW) : dstW;
 
+		h = Clip(h, 0, (iter->y + iter->h));
+		w = Clip(w, 0, (iter->x + iter->w));
+
 //		UartPrintf("CopyToPrimary: offset=%d,%d, iter->y=%d, h=%d, iter->x=%d, w=%d, stride=%d\n",
 //			mOffset.x, mOffset.y,
 //			iter->y, h, iter->x, w, mFBProperties.mStride);
@@ -204,7 +208,8 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 			}
 			else
 			{
-				memcpy(dst, src, w * 4);
+				if (w > iter->x)
+					memcpy(dst, src, (w - iter->x) * 4);
 			}
 			srcY++;
 			if (srcY >= mFBProperties.mGeometry.h)
@@ -312,7 +317,15 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 			else if (aaMode == eAntiAliasLineModeAlpha2)
 				color.a = Clip(error, 0, 255);
 		}
-		*ptr = color;
+		// If drawing directly to the screen, we need to alpha blend
+		if (mSurfaceSelection == ePrimaryFront || mSurfaceSelection == ePrimaryBack)
+		{
+			*ptr = color;//.AlphaBlend(*ptr);	This breaks fill due to the boundary not being the proper color ;(
+		}
+		else
+		{
+			*ptr = color;
+		}
 		x += xDelta;
 		y += yDelta;
 		//Sleep(0);
@@ -377,6 +390,43 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	// Draw the fourth and last segment back to the beginning
 	DrawLine(color, p3.x, p3.y, p0.x, p0.y, p3Array, p3ArraySize,
 		(aaEdges & eAntiAliasS3) ? (aaMode2 ? eAntiAliasLineModeAlpha2 : eAntiAliasLineModeAlpha1) : eAntiAliasLineModeNone);
+
+	// Are we tracking dirty rects?
+	if (mDirtyRegion)
+	{
+		// Simple box for now
+		Rect rect;
+		int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide) >> 2;
+		if (clipped < 90)
+		{
+			rect.x = p0.x;
+			rect.y = p1.y;
+			rect.w = p2.x - p0.x + 1;
+			rect.h = p3.y - p1.y + 1;
+		}
+		else if (clipped < 180)
+		{
+			rect.x = p3.x;
+			rect.y = p0.y;
+			rect.w = p1.x - p3.x + 1;
+			rect.h = p2.y - p0.y + 1;
+		}
+		else if (clipped < 270)
+		{
+			rect.x = p2.x;
+			rect.y = p3.y;
+			rect.w = p0.x - p2.x + 1;
+			rect.h = p1.y - p3.y + 1;
+		}
+		else
+		{
+			rect.x = p1.x;
+			rect.y = p2.y;
+			rect.w = p3.x - p1.x + 1;
+			rect.h = p0.y - p2.y + 1;
+		}
+		mDirtyRegion->AddRect(rect);
+	}
 
 	if (fill)
 	{

@@ -7,6 +7,7 @@
 #include "uart0.h"
 
 #include "GraphicsShim.h"
+#include "Region.h"
 #include "ClusterElement.h"
 
 extern FontDatabaseFile*	gFontErasDemi18;		// 18 point Eras Demi ITC
@@ -26,7 +27,7 @@ ClusterElement::~ClusterElement()
 }
 
 bool
-ClusterElement::Init(const Rect& box, bool isPrimary)
+ClusterElement::Init(const Rect& box, bool isPrimary, bool doubleBuffer)
 {
 	bool res = false;
 	do
@@ -46,12 +47,16 @@ ClusterElement::Init(const Rect& box, bool isPrimary)
 		Invalidate(box);
 		FramebufferProperties properties;
 		properties.mBitsPerPixel = 32;
-		properties.mDoubleBuffer = false;
+		properties.mDoubleBuffer = doubleBuffer;
 		properties.mGeometry = box;
 		if (isPrimary)
 			mGfx.AllocatePrimaryFramebuffer(properties);
 		else
 			mGfx.AllocateFramebuffer(properties);
+
+		// Mark the background/foregraond invalid so that they will get drawn
+		mBackgroundDirtyRegion.AddRect(mBoundingBox);
+		mForegroundDirtyRegion.AddRect(mBoundingBox);
 
 		res = true;
 	} while (false);
@@ -68,7 +73,7 @@ void
 ClusterElement::SetLocation(const Point& loc)
 {
 	// Invalidate the background for the old location
-	mBackgroundDirtyRegion.AddRect(mBoundingBox);
+	mLowerZOrderDirtyRegion.AddRect(mBoundingBox);
 
 	mBoundingBox.x = loc.x;
 	mBoundingBox.y = loc.y;
@@ -120,8 +125,8 @@ ClusterElement::Update()
 	// Update our internal state, and flag foreground/background if
 	// any redraws are needed
 
-	// We return any background area that needs to be redrawn
-	return mBackgroundDirtyRegion;
+	// We return any area that we did not draw so the object below us will draw it
+	return mLowerZOrderDirtyRegion;
 }	
 
 Region 
@@ -137,11 +142,12 @@ ClusterElement::Draw()
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
 		// Copy the affected region to the primary surface
-		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects());
+		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects(), false);
 	}
 	// Clear our dirty regions since it is assumed we have drawn everything we are going to draw
 	mForegroundDirtyRegion.Clear();
 	mBackgroundDirtyRegion.Clear();
+	mLowerZOrderDirtyRegion.Clear();
 	return ret;
 }	
 

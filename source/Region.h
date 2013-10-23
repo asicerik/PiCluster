@@ -14,7 +14,9 @@ public:
 	Region();
 	Region(Rect rect);
 	~Region();
+	void SetMaxRects(size_t maxRects);
 	void Clear();
+	bool Empty();
 	void AddRect(const Rect& rect);
 	void SubtractRect(const Rect& rect);
 	static Region CombineRegion(Region& a, Region& b, RegionOperation op);
@@ -25,7 +27,10 @@ public:
 	};
 	Rect GetDirtyRect();
 protected:
+	void CoalesceRects();
+
 	std::vector<Rect>	mDirtyRects;
+	size_t				mMaxRects;		//!< The max number of rects we will allow. We will coelesce them after that
 };
 
 

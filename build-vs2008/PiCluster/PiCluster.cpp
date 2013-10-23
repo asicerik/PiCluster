@@ -114,7 +114,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    hInst = hInstance; // Store instance handle in our global variable
 
    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
+      1920 + 296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
+//      296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
 
    if (!hWnd)
    {
@@ -189,8 +190,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			winRect.top   = dirty.y;
 			winRect.right = dirty.x + dirty.w;
 			winRect.bottom= dirty.y + dirty.h;
-			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
-			//StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
+			//BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
+			StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
 
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
 			SelectObject(hdc, GetStockObject(WHITE_PEN));

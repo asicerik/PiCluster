@@ -10,6 +10,31 @@
 
 GraphicsContext			InstrumentCluster::mFontEras18;
 
+/*
+	Graphics general concepts:
+	Each display element shown is based on a ClusterElement.
+	We maintain a vector of elements to be drawn. The list is kept in z-order.
+	The lowest order element is the background element.
+
+	ClusterElements can draw to their own framebuffers, or directly to the screen (which
+	may be double buffered itself.) Wherever possible, it is best to pre-render elements
+	to framebuffers that can quickly be copied to the screen using DMA or BitBlits.
+	The mBackgrond element is an example of this. It draws a gradient at boot time, and then
+	never has to recreate the gradient again. It can simply copy the rendered image from its
+	framebuffer to the screen.
+
+	ClusterElements keep track of their foreground and background regions that need repainting
+	using the Region class. The drawing cycle consists of two phases:
+
+	Phase 1 Update() : 
+		During the update phase, ClusterElements determine what state changes have occurred since
+		the last Update/Draw cycle. If their internal elements have moved, they may have exposed 
+		an area from the element below it. This is indicated by returning a Region object from
+		the Update() call. The Update() phase is called in reverse z-order. So, the top elements
+		are updated first. Since each object returns a region of what it exposed, the next element
+		called will be passed the Region that was just invalidated. If this next element called
+		can completely draw the exposed area, it will n
+*/
 InstrumentCluster::InstrumentCluster()
 {
 }
@@ -34,11 +59,11 @@ InstrumentCluster::Init(const Rect& box)
 		// Background - we use a cluster element so that we get all the graphics functions
 		mBackground.Init(box);
 		mBackground.SetGradientAngle(0);
-		mBackground.AddGradientStop(0.0, eOpaque, 0, 0, 64);
+		mBackground.AddGradientStop(0.0, eOpaque, 0, 0, 96);
 		mBackground.AddGradientStop(1.0, eOpaque, 0, 0, 0);
 
 		// Draw directly to the screen
-		mBackground.GetGraphicsContext().SelectSurface(eFront);
+		mBackground.GetGraphicsContext().SetSurfaceSelection(eFront);
 		mElements.push_back(&mBackground);
 
 		// A test element
@@ -49,10 +74,10 @@ InstrumentCluster::Init(const Rect& box)
 		mTest.Init(box);
 		mTest.SetGradientAngle(0);
 		mTest.AddGradientStop(0.0, eOpaque, 128, 128, 128 );	// med grey
-		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light black
+		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light grey
 
 		// Draw directly to the screen
-		mTest.GetGraphicsContext().SelectSurface(ePrimaryFront);
+		mTest.GetGraphicsContext().SetSurfaceSelection(ePrimaryFront);
 		//mElements.push_back(&mTest);
 
 		// Speedometer
@@ -63,17 +88,15 @@ InstrumentCluster::Init(const Rect& box)
 		point.y = 50;
 
 		mSpeedo.Init(box);
+		mSpeedo.SetMinMax(0, 160, 5, 10, -120, 120);
+
 		//mSpeedo.SetLocation(point);
-		// Draw directly to the screen
-		mSpeedo.GetGraphicsContext().SelectSurface(eFront);
 		mElements.push_back(&mSpeedo);
 		
 		point.x = 1280 - 200 - box.w;
 		point.y = 50;
 		mTach.Init(box);
 		mTach.SetLocation(point);
-		// Draw directly to the screen
-		mTach.GetGraphicsContext().SelectSurface(ePrimaryFront);
 		//mElements.push_back(&mTach);
 
 		res = true;
@@ -85,16 +108,13 @@ bool
 InstrumentCluster::Update()
 {
 	bool res = false;
-	static Point loc = { 0, 0 };
+	static int16_t speed = 0;
 	do
 	{
-		mTest.SetLocation(loc);
-		loc.x++;
-		loc.y++;
-		if (loc.y > 480)
+		mSpeedo.SetValue(speed++);
+		if (speed > 160)
 		{
-			loc.x = 0;
-			loc.y = 0;
+			speed = 0;
 		}
 
 		// Go through all the elements in top-down Z order

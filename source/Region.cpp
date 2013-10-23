@@ -26,6 +26,20 @@ Region::Clear()
 	mDirtyRects.clear();
 }
 
+bool
+Region::Empty()
+{
+	return mDirtyRects.empty();
+}
+
+void 
+Region::SetMaxRects(size_t maxRects)
+{
+	mMaxRects = maxRects;
+	if (mDirtyRects.size() > mMaxRects)
+		CoalesceRects();
+}
+
 void 
 Region::AddRect(const Rect& rect)
 {
@@ -165,4 +179,15 @@ Region::GetDirtyRect()
 		ret.h = botRight.y - topLeft.y;
 	}
 	return ret;
+}
+
+void 
+Region::CoalesceRects()
+{
+	return;
+
+	while (mDirtyRects.size() > mMaxRects)
+	{
+		// Coalesce the smallest rects instead of making the biggest ones even bigger
+	}
 }

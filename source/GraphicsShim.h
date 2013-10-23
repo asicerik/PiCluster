@@ -179,6 +179,7 @@ struct PACK FontDatabaseFile
 										//!< 255 = fully opaque. 0 = transparent (background)
 };
 
+class Region;
 class GraphicsContextBase
 {
 public:
@@ -207,7 +208,8 @@ public:
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
 
-	GraphicsContextBase*	SelectSurface(SurfaceSelection selection);	
+	GraphicsContextBase*	SetSurfaceSelection(SurfaceSelection selection);	
+	SurfaceSelection		GetSurfaceSelection()		{ return mSurfaceSelection; };	
 	GraphicsContextBase*	GetSelectedSurface()		{ return mSelectedSurface; };
 	Color32*				GetSelectedFramebuffer()	{ return mCurrBufferPtr; };
 	Color32*				GetBackBuffer()				{ return mBackBufferPtr; };
@@ -215,6 +217,8 @@ public:
 	void					SetOffset(Point offset)		{ mOffset = offset; };
 	void					SetAntiAlias(bool val)		{ mAntiAlias = val; };
 	bool					GetAntiAlias()				{ return mAntiAlias; };
+	void					EnableDirtyRects(Region* region)	{ mDirtyRegion = region; };
+	void					DisableDirtyRects()			{ mDirtyRegion = NULL; };
 
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
 
@@ -232,6 +236,7 @@ protected:
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
 	Point					mOffset;				//!> x/y offset relative to primary surface
 	bool					mAntiAlias;				//!< If true, apply anti-aliasing
+	Region*					mDirtyRegion;			//!< If non-null, use this region to track dirty rects
 };
 
 #ifdef WIN32
