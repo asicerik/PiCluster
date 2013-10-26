@@ -16,6 +16,10 @@
 
 GraphicsContextBase*		GraphicsContextBase::mPrimaryContext = NULL;
 
+// Static vars
+//Color32	GraphicsContextBase::kMagenta(202, 31, 123, 255);
+Color32	GraphicsContextBase::kMagenta(202, 31, 123, eTransparent);
+
 Color32f 
 Color32::ToColor32f()
 {
@@ -57,7 +61,7 @@ GraphicsContextBase::GraphicsContextBase()
 	mCurrBufferPtr		= NULL;
 	mFrontBufferPtr		= NULL;
 	mBackBufferPtr		= NULL;
-	mOffset.x = mOffset.y = 0;
+	mScreenOffset.x = mScreenOffset.y = 0;
 }
 
 GraphicsContextBase* 
@@ -88,8 +92,45 @@ GraphicsContextBase::SetSurfaceSelection(SurfaceSelection selection)
 	return mSelectedSurface;
 }
 
+Point
+GraphicsContextBase::ClientToScreen(const Point& clientPos)
+{
+	Point ret;
+	ret.x = clientPos.x + mScreenOffset.x;
+	ret.y = clientPos.y + mScreenOffset.y;
+	return ret;
+}
+
+Rect
+GraphicsContextBase::ClientToScreen(const Rect& clientRect)
+{
+	Rect ret = clientRect;
+	ret.x = clientRect.x + mScreenOffset.x;
+	ret.y = clientRect.y + mScreenOffset.y;
+	return ret;
+}
+
+Point
+GraphicsContextBase::ScreenToClient(const Point& screenPos)
+{
+	Point ret;
+	ret.x = screenPos.x - mScreenOffset.x;
+	ret.y = screenPos.y - mScreenOffset.y;
+	return ret;
+}
+
+Rect
+GraphicsContextBase::ScreenToClient(const Rect& screenRect)
+{
+	Rect ret = screenRect;
+	ret.x = screenRect.x - mScreenOffset.x;
+	ret.y = screenRect.y - mScreenOffset.y;
+	return ret;
+}
+
+
 void
-GraphicsContextBase::GradientRectangle(int16_t angle, std::vector<GradientStop>& stops)
+GraphicsContextBase::GradientRectangle(Rect location, int16_t angle, std::vector<GradientStop>& stops)
 {
 	UartPrintf("GradientRectangle()\n");
 	if (stops.empty())
@@ -118,16 +159,26 @@ GraphicsContextBase::GradientRectangle(int16_t angle, std::vector<GradientStop>&
 			colorDeltas.push_back(delta);
 		}
 	}
-	UartPrintf("GradientRectangle() : w=%d,h=%d,angle=%d,stops=%d\n",
-			(int)mFBProperties.mGeometry.w,
-			(int)mFBProperties.mGeometry.h,
+
+	size_t stopIndex = 0;
+	location.x = Clip(location.x, 0, mFBProperties.mGeometry.w-1);
+	location.y = Clip(location.y, 0, mFBProperties.mGeometry.h-1);
+	int16_t right  = location.x + location.w - 1;
+	int16_t bottom = location.y + location.h - 1;
+	right  = Clip(right, 0, mFBProperties.mGeometry.w-1);
+	bottom = Clip(bottom, 0, mFBProperties.mGeometry.h-1);
+
+	UartPrintf("GradientRectangle() : Rect=%d,%d - %d,%d. angle=%d,stops=%d\n",
+			location.x,
+			location.y,
+			right,
+			bottom,
 			(int)angle,
 			(int)stops.size());
 
-	size_t stopIndex = 0;
-	for (int16_t y=0; y<mFBProperties.mGeometry.h;)
+	for (int16_t y=location.y; y<=bottom;)
 	{
-		GradientLine(currColor.ToColor32(), noColorDelta, 0, mFBProperties.mGeometry.w-1, y);
+		GradientLine(currColor.ToColor32(), noColorDelta, location.x, right, y);
 		
 		if ((++y >= yStops[stopIndex]) && ((stopIndex + 1) < yStops.size()))
 		{
@@ -141,6 +192,19 @@ GraphicsContextBase::GradientRectangle(int16_t angle, std::vector<GradientStop>&
 		currColor.r += currColorDelta.r;
 		currColor.g += currColorDelta.g;
 		currColor.b += currColorDelta.b;
+	}
+}
+
+void
+GraphicsContextBase::FillRectangle(Rect rect, Color32 argb)
+{
+	for (int16_t y=rect.y; y < rect.y + rect.h; y++)
+	{
+		Color32* ptr = mCurrBufferPtr + rect.x + (y * mFBProperties.mStride/4);
+		for (int16_t x=0; x < rect.w; x++)
+		{
+			*ptr++ = argb;
+		}
 	}
 }
 
@@ -164,42 +228,95 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 	std::vector<Rect>::iterator iter = rects.begin();
 	for (; iter != rects.end(); iter++)
 	{
-		// Make sure we stay within the bounds of the source buffer
-		int16_t srcY = iter->y - mOffset.y;
-		int16_t srcH = (srcY + iter->h);
-		srcH = Clip(srcH, 0, mFBProperties.mGeometry.h);
-		srcH = Clip(srcH, 0, iter->h);
-		int16_t srcX = iter->x - mOffset.x;
-		int16_t srcW = (srcX + iter->w);
-		srcW = Clip(srcW, 0, mFBProperties.mGeometry.w);
-		srcW = Clip(srcW, 0, iter->w);
-
-//		UartPrintf("CopyToPrimary: srcW=%d, srcH=%d, iter->w=%d, iter->h=%d\n", srcW, srcH, iter->w, iter->h);
-
-		// Now check the destination buffer
-		int16_t dstH = iter->y + srcH;
-		dstH = Clip(dstH, 0, mPrimaryContext->GetFramebufferProperties().mGeometry.h);
-		int16_t dstW = iter->x + srcW;
-		dstW = Clip(dstW, 0, mPrimaryContext->GetFramebufferProperties().mGeometry.w);
-//		UartPrintf("CopyToPrimary: dstW=%d, dstH=%d\n", dstW, dstH);
-
-		int16_t h = ((iter->y + srcH) < dstH) ? (iter->y + srcH) : dstH;
-		int16_t w = ((iter->x + srcW) < dstW) ? (iter->x + srcW) : dstW;
-
-		h = Clip(h, 0, (iter->y + iter->h));
-		w = Clip(w, 0, (iter->x + iter->w));
-
-//		UartPrintf("CopyToPrimary: offset=%d,%d, iter->y=%d, h=%d, iter->x=%d, w=%d, stride=%d\n",
-//			mOffset.x, mOffset.y,
-//			iter->y, h, iter->x, w, mFBProperties.mStride);
-		for (int16_t y = iter->y; y < (h); y++)
+		// NOTE : The rectangles are in client coordinates
+		// Account for the screen coordinates and make sure we are within the bounds
+		// of our source framebuffer
+		Rect srcRect = *iter;
+		if (srcRect.x < 0)
 		{
-			Color32* src = mCurrBufferPtr + srcX + (srcY) * (mFBProperties.mStride >> 2);
-			Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + iter->x + y * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
+			srcRect.w += srcRect.x;
+			srcRect.x = 0;
+		}
+		if (srcRect.y < 0)
+		{
+			srcRect.h += srcRect.y;
+			srcRect.y = 0;
+		}
+		if (mScreenOffset.x < 0)
+		{
+			srcRect.x += mScreenOffset.x;
+			srcRect.w += mScreenOffset.x;
+		}
+		else if (mScreenOffset.x >= mFBProperties.mGeometry.w)
+		{
+			srcRect.w -= (mScreenOffset.x - mFBProperties.mGeometry.w);
+		}
+		if (mScreenOffset.y < 0)
+		{
+			srcRect.y += mScreenOffset.y;
+			srcRect.h += mScreenOffset.y;
+		}
+		else if (mScreenOffset.y >= mFBProperties.mGeometry.h)
+		{
+			srcRect.h -= (mScreenOffset.y - mFBProperties.mGeometry.h);
+		}
+		srcRect.x = Clip(srcRect.x, 0, (mFBProperties.mGeometry.w-1));
+		srcRect.y = Clip(srcRect.y, 0, (mFBProperties.mGeometry.h-1));
+		srcRect.w = Clip(srcRect.w, 0, mFBProperties.mGeometry.w);
+		srcRect.h = Clip(srcRect.h, 0, mFBProperties.mGeometry.h);
+
+		UartPrintf("CopyToPrimary: srcRect=%d,%d : %d,%d\n", srcRect.x, srcRect.y, srcRect.w, srcRect.h);
+		UartPrintf("CopyToPrimary: iter=%d,%d : %d,%d\n", iter->x, iter->y, iter->w, iter->h);
+
+		Rect dstRect = *iter;
+		FramebufferProperties primaryFbProps = mPrimaryContext->GetFramebufferProperties();
+
+		if (dstRect.x < 0)
+		{
+			dstRect.w += dstRect.x;
+			dstRect.x = 0;
+		}
+		if (dstRect.y < 0)
+		{
+			dstRect.h += dstRect.y;
+			dstRect.y = 0;
+		}
+
+		if (mScreenOffset.x < 0)
+		{
+			dstRect.w += mScreenOffset.x;
+		}
+		else
+		{
+			dstRect.x += mScreenOffset.x;
+			if (mScreenOffset.x >= primaryFbProps.mGeometry.w)
+				dstRect.w -= mScreenOffset.x;
+		}
+		if (mScreenOffset.y < 0)
+		{
+			dstRect.h += mScreenOffset.y;
+		}
+		else
+		{
+			dstRect.y += mScreenOffset.y;
+			if (mScreenOffset.y >= primaryFbProps.mGeometry.h)
+				dstRect.h -= mScreenOffset.y;
+		}
+		dstRect.x = Clip(dstRect.x, 0, (primaryFbProps.mGeometry.w-1));
+		dstRect.y = Clip(dstRect.y, 0, (primaryFbProps.mGeometry.h-1));
+		dstRect.w = Clip(dstRect.w, 0, primaryFbProps.mGeometry.w);
+		dstRect.h = Clip(dstRect.h, 0, primaryFbProps.mGeometry.h);
+
+		UartPrintf("CopyToPrimary: dstRect=%d,%d : %d,%d\n", dstRect.x, dstRect.y, dstRect.w, dstRect.h);
+
+		for (int16_t y = 0; y < srcRect.h; y++)
+		{
+			Color32* src = mCurrBufferPtr + srcRect.x + (y + srcRect.y) * (mFBProperties.mStride >> 2);
+			Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + dstRect.x + (y + dstRect.y) * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
 			//UartPrintf("CopyToPrimary: src=%p, dst=%p\n", src,dst);
 			if (alphaBlend)
 			{
-				for (int16_t x = iter->x; x < (w); x++)
+				for (int16_t x = 0; x < srcRect.w; x++)
 				{
 					*dst = src->AlphaBlend(*dst);
 					src++;
@@ -208,12 +325,8 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 			}
 			else
 			{
-				if (w > iter->x)
-					memcpy(dst, src, (w - iter->x) * 4);
+				memcpy(dst, src, (srcRect.w) * 4);
 			}
-			srcY++;
-			if (srcY >= mFBProperties.mGeometry.h)
-				break;
 #ifdef WIN32
 			if ((y % 8) == 0)
 				Sleep(1);
@@ -231,9 +344,9 @@ GraphicsContextBase::GradientLine(Color32 startColor, Color32f colorDelta, int16
 	if ((mSurfaceSelection == ePrimaryFront) || (mSurfaceSelection == ePrimaryBack))
 	{
 		// Adjust x,y to position ourselves into the primary buffer
-		startX	+= mOffset.x;
-		endX	+= mOffset.x;
-		y		+= mOffset.y;
+		startX	+= mScreenOffset.x;
+		endX	+= mScreenOffset.x;
+		y		+= mScreenOffset.y;
 	}
 
 	Color32* ptr = mCurrBufferPtr + startX + y * GetSelectedSurface()->GetFramebufferProperties().mStride / sizeof(Color32);
@@ -626,11 +739,12 @@ GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startWideAngle
 }
 
 void
-GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color)
+GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& colorIn)
 {
 	if (!font)
 		return;
 
+	Color32 color = colorIn;
 	uint32_t fontStride = font->cellWidth * font->columns;
 	int16_t  width		= font->cellWidth * text.length();
 	int16_t  dstX		= loc.x;
@@ -750,15 +864,16 @@ GraphicsContextWin::FreeFramebuffer()
 void 
 GraphicsContextWin::FillRectangle(Rect rect, Color32 argb)
 {
-	RECT winRect;
-	HBRUSH brush;
-	winRect.left	= rect.x;
-	winRect.right	= rect.x + rect.w;
-	winRect.top		= rect.y;
-	winRect.bottom	= rect.y + rect.h;
-	brush = CreateSolidBrush(RGB(argb.r, argb.g, argb.b));
-	FillRect(mDC, &winRect, brush);
-	DeleteObject(brush);
+	//RECT winRect;
+	//HBRUSH brush;
+	//winRect.left	= rect.x;
+	//winRect.right	= rect.x + rect.w;
+	//winRect.top		= rect.y;
+	//winRect.bottom	= rect.y + rect.h;
+	//brush = CreateSolidBrush(RGB(argb.r, argb.g, argb.b));
+	//FillRect(mDC, &winRect, brush);
+	//DeleteObject(brush);
+	GraphicsContextBase::FillRectangle(rect, argb);
 }
 
 bool
@@ -799,7 +914,7 @@ GraphicsContextWin::CreateFontDatabase(std::string fontName, int16_t height)
 		SetTextColor(mDC, RGB(255,255,255));
 		SetBkMode(mDC,TRANSPARENT);
 
-		Rect maxSize = { 0,0,0,0 };
+		Rect maxSize(0,0,0,0);
 		RECT winRect;
 		SetRect(&winRect, 0, 0, colWidth, rowHeight);
 
@@ -948,6 +1063,7 @@ GraphicsContextPi::AllocateFramebuffer(FramebufferProperties& properties)
 		mFrontBufferPtr = new Color32[bufferSize/4];
 		res = mFrontBufferPtr != NULL;
 		UartPrintf("Allocate framebuffer size=%d, res=%d: front = %x\n", bufferSize, (int)res, mFrontBufferPtr);
+		mCurrBufferPtr  = mFrontBufferPtr;
 
 	} while (false);
 
@@ -966,6 +1082,8 @@ GraphicsContextPi::FreeFramebuffer()
 void
 GraphicsContextPi::FillRectangle(Rect rect, Color32 argb)
 {
+	UartPrintf("FillRectangle: rect=%d,%d : %d,%d. stride=%d\n", rect.x, rect.y, rect.w, rect.h, mFBProperties.mStride);
+	GraphicsContextBase::FillRectangle(rect, argb);
 }
 
 bool __attribute__((optimize("O0")))

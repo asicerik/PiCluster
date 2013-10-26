@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "PiCluster.h"
 #include "winsock.h"
+#include "Tests.h"
 
 #define MAX_LOADSTRING 100
 
@@ -125,7 +126,13 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
 
-   Rect rect = { 0, 0, 1280, 480 };
+   // Run the Pi tests
+   Tests tests;
+   tests.RunAllTests();
+
+  // while(1);
+
+   Rect rect(0, 0, 1280, 480);
    gCluster.Init(rect);
    gFontDB.CreateFontDatabase("Eras Demi ITC", 18);
 
@@ -190,8 +197,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			winRect.top   = dirty.y;
 			winRect.right = dirty.x + dirty.w;
 			winRect.bottom= dirty.y + dirty.h;
-			//BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
-			StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
+			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
+			//StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
 
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
 			SelectObject(hdc, GetStockObject(WHITE_PEN));

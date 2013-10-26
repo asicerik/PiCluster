@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 static const uint32_t kMaxFramebufferWidth	= 4096;
 static const uint32_t kMaxFramebufferHeight	= 4096;
@@ -14,14 +15,26 @@ static const uint32_t kMaxFramebufferDepth	= 32;
 
 #ifdef WIN32
 #define PACK
+#define ALIGN
 #else
 #define PACK __attribute__((__packed__))
+#define ALIGN __attribute__ ((aligned (4)))		// 32 bit alignment on ARM
 #endif
 
 struct PACK Point
 {
-	int16_t		x;
-	int16_t		y;
+	Point() {};
+	// The default copy constructor does not seem to work in Pi-land, so...
+	Point(const Point& in)
+	{
+		x = in.x;
+		y = in.y;
+	}
+	Point(int16_t xIn, int16_t yIn)
+	{
+		x = xIn;
+		y = yIn;
+	}
 	Point& operator=(const Point &rhs)
 	{
 	    // Check for self-assignment!
@@ -32,26 +45,44 @@ struct PACK Point
 	    this->y = rhs.y;
 	    return *this;
 	}
+	int16_t		x;
+	int16_t		y;
 };
 
 struct PACK Rect
 {
+	Rect() {};
+	// The default copy constructor does not seem to work in Pi-land, so...
+	Rect(const Rect& in)
+	{
+		x = in.x;
+		y = in.y;
+		w = in.w;
+		h = in.h;
+	}
+	Rect(int16_t xIn, int16_t yIn, int16_t wIn, int16_t hIn)
+	{
+		x = xIn;
+		y = yIn;
+		w = wIn;
+		h = hIn;
+	}
+//	Rect& operator=(const Rect &rhs)
+//	{
+//	    // Check for self-assignment!
+//	    if (this == &rhs)      // Same object?
+//	      return *this;        // Yes, so skip assignment, and just return *this.
+//
+//	    this->x = rhs.x;
+//	    this->y = rhs.y;
+//	    this->w = rhs.w;
+//	    this->h = rhs.h;
+//	    return *this;
+//	}
 	int16_t		x;
 	int16_t		y;
 	int16_t		w;
 	int16_t		h;
-	Rect& operator=(const Rect &rhs)
-	{
-	    // Check for self-assignment!
-	    if (this == &rhs)      // Same object?
-	      return *this;        // Yes, so skip assignment, and just return *this.
-
-	    this->x = rhs.x;
-	    this->y = rhs.y;
-	    this->w = rhs.w;
-	    this->h = rhs.h;
-	    return *this;
-	}
 };
 
 struct Color32f;
@@ -59,25 +90,77 @@ struct Color32f;
 #ifdef WIN32
 struct Color32
 {
+	Color32(uint8_t	rIn, uint8_t gIn, uint8_t bIn, uint8_t aIn)
+	{
+		r = rIn;
+		g = gIn;
+		b = bIn;
+		a = aIn;
+	};
+	Color32() {};
 	uint8_t		b;
 	uint8_t		g;
 	uint8_t		r;
 	uint8_t		a;
 	Color32f ToColor32f();
 	Color32	 AlphaBlend(Color32 background);
+	bool operator==(const Color32 &rhs)
+	{
+		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
+			return true;
+		else
+			return false;
+	}
+	bool operator!=(const Color32 &rhs)
+	{
+		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
+			return false;
+		else
+			return true;
+	}
 };
 #else
-struct Color32
+struct PACK Color32
 {
+	Color32(uint8_t	rIn, uint8_t gIn, uint8_t bIn, uint8_t aIn)
+	{
+		r = rIn;
+		g = gIn;
+		b = bIn;
+		a = aIn;
+	};
+	Color32() {};
 	uint8_t		r;
 	uint8_t		g;
 	uint8_t		b;
 	uint8_t		a;
 	Color32f ToColor32f();
+	Color32	 AlphaBlend(Color32 background);
+	inline bool CompareSansAlpha(const Color32 in)
+	{
+		if ((r == in.r) && (g == in.g) && (b == in.b))
+			return true;
+		else
+			return false;
+	}
+	bool operator==(const Color32 &rhs)
+	{
+		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
+			return true;
+		else
+			return false;
+	}
+	bool operator!=(const Color32 &rhs)
+	{
+		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
+			return false;
+		else
+			return true;
+	}
 };
 #endif
 
-struct Color32f
+struct PACK Color32f
 {
 	float		a;
 	float		b;
@@ -87,7 +170,7 @@ struct Color32f
 };
 
 // A color point in x/y space
-struct GradientStop
+struct PACK GradientStop
 {
 	float		mPosition;
 	Color32		mColor;
@@ -114,8 +197,8 @@ enum AntiAliasEdges
 	eAntiAliasS1		= 0x2,	// top only
 	eAntiAliasS2		= 0x4,	// right-side only
 	eAntiAliasS3		= 0x8,	// bottom only
-	eAntiAliasS0S2		= 0x9,	// top/bottom only
-	eAntiAliasS1S3		= 0x6,	// left/right only
+	eAntiAliasS0S2		= 0x5,	// left/right only
+	eAntiAliasS1S3		= 0xa,	// top/bottom only
 	eAntiAliasS0S1S2S3	= 0xf,	// all four sides
 };
 
@@ -143,18 +226,20 @@ enum SurfaceSelection
 	eBack
 };
 
-struct FramebufferProperties
+struct ALIGN FramebufferProperties
 {
 	FramebufferProperties()
 	{
 		mBitsPerPixel 	= 32;
 		mStride			= 0;
 		mDoubleBuffer	= false;
+		mBorderSize		= 0;
 	}
 	Rect			mGeometry;
 	int8_t			mBitsPerPixel;		//!< Only 32 is valid currently
 	int32_t			mStride;			//!< Stride in bytes
 	bool			mDoubleBuffer;		//!< Allocate a front and back buffer for drawing
+	int16_t			mBorderSize;		//!< Number of pixels to pad each border by - TEST ONLY!
 };
 
 /*
@@ -180,19 +265,21 @@ struct PACK FontDatabaseFile
 };
 
 class Region;
-class GraphicsContextBase
+class ALIGN GraphicsContextBase
 {
 public:
+	static Color32	kMagenta;
+
 	GraphicsContextBase();
 	virtual ~GraphicsContextBase() {};
 
 	virtual bool	AllocatePrimaryFramebuffer(FramebufferProperties& properties) = 0;
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties) = 0;
 	virtual void	FreeFramebuffer() = 0;
-	virtual void	FillRectangle(Rect rect, Color32 argb) = 0;
+	virtual void	FillRectangle(Rect rect, Color32 argb);
 	virtual void	CopyToPrimary(std::vector<Rect> rects, bool alphaBlend=false);
 	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
-	virtual void	GradientRectangle(int16_t angle, std::vector<GradientStop>& stops);
+	virtual void	GradientRectangle(Rect location, int16_t angle, std::vector<GradientStop>& stops);
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
 							 AntiAliasLineMode aaMode=eAntiAliasLineModeNone);
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1,
@@ -214,13 +301,21 @@ public:
 	Color32*				GetSelectedFramebuffer()	{ return mCurrBufferPtr; };
 	Color32*				GetBackBuffer()				{ return mBackBufferPtr; };
 	Color32*				GetFrontBuffer()			{ return mFrontBufferPtr; };
-	void					SetOffset(Point offset)		{ mOffset = offset; };
+	void					SetScreenOffset(Point offset) { mScreenOffset = offset; };
+	Point					GetScreenOffset()			{ return mScreenOffset; };
+	Point					ClientToScreen(const Point& clientPos);
+	Rect					ClientToScreen(const Rect&  clientRect);
+	Point					ScreenToClient(const Point& screenPos);
+	Rect					ScreenToClient(const Rect&  screenRect);
 	void					SetAntiAlias(bool val)		{ mAntiAlias = val; };
 	bool					GetAntiAlias()				{ return mAntiAlias; };
 	void					EnableDirtyRects(Region* region)	{ mDirtyRegion = region; };
 	void					DisableDirtyRects()			{ mDirtyRegion = NULL; };
 
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
+
+	// Test stuff
+	bool					mTestMode;				//!< If true, apply test settings
 
 protected:
 	virtual void	FloodFillLeft(uint32_t intColor, Point* start, int16_t arraySize);
@@ -234,7 +329,7 @@ protected:
 	Color32*				mBackBufferPtr;			//!< Pointer to the inactive framebuffer data (if present)
 	FramebufferProperties	mFBProperties;			//!< Properties for this framebuffer
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
-	Point					mOffset;				//!> x/y offset relative to primary surface
+	Point					mScreenOffset;			//!> x/y offset relative to primary surface
 	bool					mAntiAlias;				//!< If true, apply anti-aliasing
 	Region*					mDirtyRegion;			//!< If non-null, use this region to track dirty rects
 };
@@ -296,7 +391,7 @@ bool MailboxRead(uintptr_t& message, enum VideoCoreChannel channel);
 
 // VideoCore framebuffer structure
 // NOTE : make sure you align your memory to a 16B boundary
-struct VideoCoreFramebufferDescriptor
+struct PACK VideoCoreFramebufferDescriptor
 {
 	VideoCoreFramebufferDescriptor()
 	{

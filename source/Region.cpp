@@ -156,11 +156,11 @@ Region::IntersectRects(const Rect& a, const Rect& b)
 Rect 
 Region::GetDirtyRect()
 {
-	Rect ret = { 0, 0, 0, 0 };
+	Rect ret(0, 0, 0, 0);
 	if (!mDirtyRects.empty())
 	{
-		Point topLeft  = { INT16_MAX, INT16_MAX };
-		Point botRight = { INT16_MIN, INT16_MIN };
+		Point topLeft( INT16_MAX, INT16_MAX );
+		Point botRight( INT16_MIN, INT16_MIN );
 		std::vector<Rect>::iterator iter = mDirtyRects.begin();
 		for (; iter != mDirtyRects.end(); iter++)
 		{
@@ -191,3 +191,21 @@ Region::CoalesceRects()
 		// Coalesce the smallest rects instead of making the biggest ones even bigger
 	}
 }
+
+void 
+Region::OffsetRegion(Point offset)
+{
+	OffsetRegion(offset.x, offset.y);
+}
+
+void 
+Region::OffsetRegion(int16_t x, int16_t y)
+{
+	std::vector<Rect>::iterator iter = mDirtyRects.begin();
+	for (; iter != mDirtyRects.end(); iter++)
+	{
+		iter->x += x;
+		iter->y += y;
+	}
+}
+

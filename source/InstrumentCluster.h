@@ -6,7 +6,7 @@
 #include "ClusterElement.h"
 #include "DialGuage.h"
 
-class InstrumentCluster
+class ALIGN InstrumentCluster
 {
 public:
 	InstrumentCluster();

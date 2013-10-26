@@ -32,31 +32,41 @@ ClusterElement::Init(const Rect& box, bool isPrimary, bool doubleBuffer)
 	bool res = false;
 	do
 	{
-		mBoundingBox = box;
+		mClientRect = box;
 
-		UartPrintf("box = %d,%d - %d,%d\n",
+		UartPrintf("&box = %p, box = %d,%d - %d,%d\n",
+				&box,
 				box.x,
 				box.y,
 				box.w,
 				box.h);
-		UartPrintf("mBoundingBox = %d,%d - %d,%d\n",
-				mBoundingBox.x,
-				mBoundingBox.y,
-				mBoundingBox.w,
-				mBoundingBox.h);
+		UartPrintf("&mClientRect = %p, mClientRect = %d,%d - %d,%d\n",
+				&mClientRect,
+				mClientRect.x,
+				mClientRect.y,
+				mClientRect.w,
+				mClientRect.h);
 		Invalidate(box);
 		FramebufferProperties properties;
 		properties.mBitsPerPixel = 32;
 		properties.mDoubleBuffer = doubleBuffer;
 		properties.mGeometry = box;
+
 		if (isPrimary)
 			mGfx.AllocatePrimaryFramebuffer(properties);
 		else
 			mGfx.AllocateFramebuffer(properties);
 
 		// Mark the background/foregraond invalid so that they will get drawn
-		mBackgroundDirtyRegion.AddRect(mBoundingBox);
-		mForegroundDirtyRegion.AddRect(mBoundingBox);
+		mBackgroundDirtyRegion.AddRect(mClientRect);
+		mForegroundDirtyRegion.AddRect(mClientRect);
+
+		// Fill the framebuffers with magenta
+		// This is needed because our fills will fail if they encounter the same
+		// background color. So, let's pick a color that hopefully will not
+		// show up anywhere
+		if (!isPrimary)
+			mGfx.FillRectangle(box, GraphicsContextBase::kMagenta);
 
 		res = true;
 	} while (false);
@@ -73,32 +83,32 @@ void
 ClusterElement::SetLocation(const Point& loc)
 {
 	// Invalidate the background for the old location
-	mLowerZOrderDirtyRegion.AddRect(mBoundingBox);
+	mScreenDirtyRegion.AddRect(mGfx.ClientToScreen(mClientRect));
 
-	mBoundingBox.x = loc.x;
-	mBoundingBox.y = loc.y;
-	mGfx.SetOffset(loc);
+	mGfx.SetScreenOffset(loc);
 
 	// Invalidate the foreground for the new location
 	mForegroundDirtyRegion.Clear();
-	mForegroundDirtyRegion.AddRect(mBoundingBox);
-//	UartPrintf("mBoundingBox = %d,%d - %d,%d\n",
-//			mBoundingBox.x,
-//			mBoundingBox.y,
-//			mBoundingBox.w,
-//			mBoundingBox.h);
+	mForegroundDirtyRegion.AddRect(mClientRect);
+	UartPrintf("mClientRect = %d,%d - %d,%d\n",
+			mClientRect.x,
+			mClientRect.y,
+			mClientRect.w,
+			mClientRect.h);
 }
 
 void 
 ClusterElement::Invalidate(const Rect& box)
 {
-	Region boxRegion(box);
+	// Translate from screen to client coordinates
+	Region boxRegion(mGfx.ScreenToClient(box));
+
 	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, boxRegion, Region::eOr);
 //	UartPrintf("Invalidate(Rect) : box = %d,%d - %d,%d, dirty = %d,%d - %d,%d\n",
-//			mBoundingBox.x,
-//			mBoundingBox.y,
-//			mBoundingBox.w,
-//			mBoundingBox.h,
+//			mClientRect.x,
+//			mClientRect.y,
+//			mClientRect.w,
+//			mClientRect.h,
 //			mForegroundDirtyRegion.GetDirtyRect().x,
 //			mForegroundDirtyRegion.GetDirtyRect().y,
 //			mForegroundDirtyRegion.GetDirtyRect().w,
@@ -108,9 +118,16 @@ ClusterElement::Invalidate(const Rect& box)
 }
 
 void 
-ClusterElement::Invalidate(const Region& region)
+ClusterElement::Invalidate(const Region& inRegion)
 {
-	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, (Region&)region, Region::eOr);
+	Region& region = (Region&)inRegion;
+	std::vector<Rect>& rects = region.GetDirtyRects();
+	for (size_t i=0; i<rects.size(); i++)
+	{
+		// Translate from screen to client coordinates
+		Region boxRegion(mGfx.ScreenToClient(rects[i]));
+		mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, (Region&)boxRegion, Region::eOr);
+	}
 //	UartPrintf("Invalidate(Region) : dirty = %d,%d - %d,%d\n",
 //			mForegroundDirtyRegion.GetDirtyRect().x,
 //			mForegroundDirtyRegion.GetDirtyRect().y,
@@ -126,7 +143,7 @@ ClusterElement::Update()
 	// any redraws are needed
 
 	// We return any area that we did not draw so the object below us will draw it
-	return mLowerZOrderDirtyRegion;
+	return mScreenDirtyRegion;
 }	
 
 Region 
@@ -136,7 +153,7 @@ ClusterElement::Draw()
 	if (mStateChanged)
 	{
 		// Our state has changed, so redraw everything
-		mGfx.GradientRectangle(mGradientAngle, mGradientStops);
+		mGfx.GradientRectangle(mClientRect, mGradientAngle, mGradientStops);
 		mStateChanged = false;
 	}
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
@@ -147,7 +164,7 @@ ClusterElement::Draw()
 	// Clear our dirty regions since it is assumed we have drawn everything we are going to draw
 	mForegroundDirtyRegion.Clear();
 	mBackgroundDirtyRegion.Clear();
-	mLowerZOrderDirtyRegion.Clear();
+	mScreenDirtyRegion.Clear();
 	return ret;
 }	
 

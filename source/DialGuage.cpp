@@ -43,14 +43,30 @@ DialGuage::Init(const Rect& box, bool isPrimary, bool doubleBuffer)
 		properties.mGeometry = box;
 		mNeedleGfx.AllocateFramebuffer(properties);
 
-		// Call the base class Init method to do all the normal housekeeping
+		// Call the base class method to do all the normal housekeeping
 		res = ClusterElement::Init(box);
 
 		mGfx.SetSurfaceSelection(eFront);
 		mNeedleGfx.SetSurfaceSelection(eFront);
 
+		// Fill the framebuffers with magenta
+		// This is needed because our fills will fail if they encounter the same
+		// background color. So, let's pick a color that hopefully will not
+		// show up anywhere
+		mGfx.FillRectangle(box, GraphicsContextBase::kMagenta);
+		mNeedleGfx.FillRectangle(box, GraphicsContextBase::kMagenta);
+
 	} while (false);
 	return res;
+}
+
+void
+DialGuage::SetLocation(const Point& loc)
+{
+	mNeedleGfx.SetScreenOffset(loc);
+
+	// Call the base class method to do all the normal housekeeping
+	ClusterElement::SetLocation(loc);
 }
 
 void
@@ -90,10 +106,14 @@ DialGuage::SetValue(uint16_t val)
 {
 	mCurrentAngleWide = (val * mValToAngle) / 256 + mMinAngleWide;
 	mStateChanged	= true;
-	if (mLowerZOrderDirtyRegion.Empty())
-		mForegroundDirtyRegion.AddRect(mBoundingBox);
+	if (mScreenDirtyRegion.Empty())
+		mForegroundDirtyRegion.AddRect(mClientRect);
 	else
-		mForegroundDirtyRegion = mLowerZOrderDirtyRegion;
+	{
+		Region temp = mScreenDirtyRegion;
+		temp.OffsetRegion(-mGfx.GetScreenOffset().x, -mGfx.GetScreenOffset().y);
+		mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, temp, Region::eOr);
+	}
 }
 
 Region 
@@ -101,7 +121,7 @@ DialGuage::Update()
 {
 	if (mStateChanged)
 	{
-		return mLowerZOrderDirtyRegion;
+		return mScreenDirtyRegion;
 	}
 	Region dummy;
 	return dummy;
@@ -111,7 +131,7 @@ Region
 DialGuage::Draw()
 {
 	Region ret = mForegroundDirtyRegion;
-	if (mStateChanged)// || !mForegroundDirtyRegion.Empty())
+	if (mStateChanged || !mForegroundDirtyRegion.Empty())
 	{
 		DrawBackground();
 		DrawForeground();
@@ -128,31 +148,44 @@ DialGuage::DrawBackground()
 	if (!mBackgroundDirtyRegion.Empty())
 	{
 		Point origin;
-		origin.x = mBoundingBox.x + mBoundingBox.w / 2;
-		origin.y = mBoundingBox.y + mBoundingBox.h / 2;
+		origin.x = mClientRect.x + mClientRect.w / 2;
+		origin.y = mClientRect.y + mClientRect.h / 2;
 
-		Color32 color;
-		color.a = eOpaque;
-		color.r = 0;
-		color.g = 0;
-		color.b = 64;
+		Color32 color(32, 32, 64, eOpaque);
 
 		mGfx.SetAntiAlias(true);
 
-		DrawEmboss(mGfx, color, origin, mBoundingBox.w / 2 - 20, mBoundingBox.w / 2, 0, 1440, 600);
+		DrawEmboss(mGfx, color, origin, mClientRect.w / 2 - 30, mClientRect.w / 2 - 10, 0, 1440, 600);
 
 		color.r = color.g = color.b = 200;
-		DrawTicks(color, origin, mBoundingBox.w / 2 - 15, mBoundingBox.w / 2 - 0, mMinAngleWide, mMaxAngleWide, mMinorTickWide, mMajorTickWide);
+		DrawEmboss(mGfx, color, origin, mClientRect.w / 2 - 5, mClientRect.w / 2 - 0, 0, 1440, 1320);
+
+		color.r = color.g = color.b = 200;
+		DrawTicks(color, origin, mClientRect.w / 2 - 25, mClientRect.w / 2 - 15, mMinAngleWide, mMaxAngleWide, mMinorTickWide, mMajorTickWide);
 
 		// Once we have drawn our background, we should never need to draw it again.
 		// Only copy it from our buffer
 		mBackgroundDirtyRegion.Clear();
 	}
 
+//	mForegroundDirtyRegion.Clear();
+//	mForegroundDirtyRegion.AddRect(mClientRect);
+
 	// If the foreground dirty region is not empty, we need to copy some (or all) of our background
 	// image to the primary buffer before the foreground is drawn
 	if (!mForegroundDirtyRegion.Empty())
 	{
+//		UartPrintf("DrawBackground: ClientRect=%d,%d : %d,%d\n",
+//				mClientRect.x,
+//				mClientRect.y,
+//				mClientRect.w,
+//				mClientRect.h);
+//		UartPrintf("DrawBackground: mForegroundDirtyRegion=%d,%d : %d,%d\n",
+//				mForegroundDirtyRegion.GetDirtyRect().x,
+//				mForegroundDirtyRegion.GetDirtyRect().y,
+//				mForegroundDirtyRegion.GetDirtyRect().w,
+//				mForegroundDirtyRegion.GetDirtyRect().h);
+
 		//Color32 color;
 		//color.r = color.g = color.b = 0;
 		//color.r = 255;
@@ -172,29 +205,25 @@ DialGuage::DrawForeground()
 {
 	if (!mForegroundDirtyRegion.Empty())
 	{
-		mLowerZOrderDirtyRegion.Clear();
+		mScreenDirtyRegion.Clear();
 
 		Point origin;
-		origin.x = mBoundingBox.x + mBoundingBox.w / 2;
-		origin.y = mBoundingBox.y + mBoundingBox.h / 2;
+		origin.x = mClientRect.x + mClientRect.w / 2;
+		origin.y = mClientRect.y + mClientRect.h / 2;
 
-		Color32 color;
-		color.a = eOpaque;
-		color.r = 0;
-		color.g = 0;
-		color.b = 64;
+		Color32 color(0, 0, 64, eOpaque);
 		mNeedleGfx.SetAntiAlias(true);
-		mLowerZOrderDirtyRegion.Clear();
-		mNeedleGfx.EnableDirtyRects(&mLowerZOrderDirtyRegion);
+		mScreenDirtyRegion.Clear();
+		mNeedleGfx.EnableDirtyRects(&mScreenDirtyRegion);
 		color.r = color.g = color.b = 230;
 
 		// Draw the needle
-		mNeedleGfx.DrawTrapezoid(color, origin, mCurrentAngleWide, 30, mBoundingBox.w / 2 - 15, 36, 4, true, eAntiAliasS0S1S2S3);
+		mNeedleGfx.DrawTrapezoid(color, origin, mCurrentAngleWide, 30, mClientRect.w / 2 - 15, 36, 4, true, eAntiAliasS0S1S2S3);
 
 		mNeedleGfx.DisableDirtyRects();
 		//color.r = color.g = color.b = 0;
 		//color.g = 255;
-		//Rect rect = mLowerZOrderDirtyRegion.GetDirtyRect();
+		//Rect rect = mScreenDirtyRegion.GetDirtyRect();
 		//mGfx.DrawLine(color, rect.x, rect.y, rect.x + rect.w, rect.y);
 		//mGfx.DrawLine(color, rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + rect.h);
 		//mGfx.DrawLine(color, rect.x, rect.y + rect.h-1, rect.x + rect.w, rect.y + rect.h-1);
@@ -207,11 +236,18 @@ DialGuage::DrawForeground()
 		rect.y = origin.y - 30;
 		rect.w = 60;
 		rect.h = 60;
-		mLowerZOrderDirtyRegion.AddRect(rect);
+		mScreenDirtyRegion.AddRect(rect);
+
+		// Move the screen dirty region to screen coordinates
+		mScreenDirtyRegion.OffsetRegion(mGfx.GetScreenOffset());
 	}
-	if (!mLowerZOrderDirtyRegion.Empty())
+	if (!mScreenDirtyRegion.Empty())
 	{
-		//Color32 color;
+		Color32 color(0, 0, 0, eTransparent);
+
+		// Move the screen dirty region to client coordinates
+		mScreenDirtyRegion.OffsetRegion(-mGfx.GetScreenOffset().x, -mGfx.GetScreenOffset().y);
+
 		//color.r = color.g = color.b = 0;
 		//color.r = 255;
 		//Rect rect = mForegroundDirtyRegion.GetDirtyRect();
@@ -221,11 +257,11 @@ DialGuage::DrawForeground()
 		//mGfx.DrawLine(color, rect.x, rect.y, rect.x, rect.y + rect.h);
 
 		// Copy the affected region to the primary surface
-		mNeedleGfx.CopyToPrimary(mLowerZOrderDirtyRegion.GetDirtyRects(), true);
-		Color32 color;
-		color.a = eOpaque;
-		color.r = color.g = color.b = 0;
-		mNeedleGfx.FillRectangle(mLowerZOrderDirtyRegion.GetDirtyRect(), color);
+		mNeedleGfx.CopyToPrimary(mScreenDirtyRegion.GetDirtyRects(), true);
+		mNeedleGfx.FillRectangle(mScreenDirtyRegion.GetDirtyRect(), color);
+
+		// Move the screen dirty region back to screen coordinates
+		mScreenDirtyRegion.OffsetRegion(mGfx.GetScreenOffset());
 	}
 }
 
@@ -245,7 +281,7 @@ DialGuage::DrawEmboss(GraphicsContext& gfx, Color32 colorMax, Point origin, int1
 		color.b = (uint8_t)(colorMax.b * shift / 720);
 
 		gfx.DrawTrapezoid(color, origin, angleWide + stepAngleWide/2, innerRadius, outerRadius, 
-			stepAngleWide, stepAngleWide, true, 
+			stepAngleWide, stepAngleWide, true,
 			eAntiAliasS1S3	// Only anti-alias side 1 and 3 (top/bottom). If we do it on the sides, we will see a boundary
 		);
 	}
@@ -258,12 +294,16 @@ DialGuage::DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t o
 	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide ++)
 	{
 		if (((angleWide - startAngleWide) % majorTickWide) == 0)
+		{
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius, outerRadius, 
 				4, 4,
 //				18, 18,
 				true,
 				eAntiAliasS0S1S2S3	// Anti-alias all four sides
 			);
+			//std::string text = "100";
+			//mGfx.DrawText(gFontErasDemi18, text, origin, color);
+		}
 		else if (((angleWide - startAngleWide) % minorTickWide) == 0)
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius + (outerRadius-innerRadius)/2, outerRadius, 
 				2, 2,

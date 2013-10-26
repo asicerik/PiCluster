@@ -6,6 +6,7 @@
 #include "GraphicsShim.h"
 #include "ClusterElement.h"
 #include "InstrumentCluster.h"
+#include "Tests.h"
 
 int main(int argc, char** argv)
 {
@@ -18,15 +19,32 @@ int main(int argc, char** argv)
 
 	UartInit();
 
-//	int i=5;
-//	while (i-- > 0)
-//	{
-//		UartPrintf("read=%x, st[0]=%x, st[1]=%x, st[2]=%x, st[3]=%x\n", (uint32_t)(bcm2835_st_read() & 0xffffffff), bcm2835_st[0], bcm2835_st[1], bcm2835_st[2], bcm2835_st[3]);
-//		bcm2835_gpio_clr(16);
-//		bcm2835_st_delay(bcm2835_st_read(), 500000);
-//		bcm2835_gpio_set(16);
-//		bcm2835_st_delay(bcm2835_st_read(), 500000);
-//	}
+	int i=5;
+	while (i-- > 0)
+	{
+		UartPrintf("\r%d    ", i);
+		bcm2835_gpio_clr(16);
+		bcm2835_st_delay(bcm2835_st_read(), 500000);
+		bcm2835_gpio_set(16);
+		bcm2835_st_delay(bcm2835_st_read(), 500000);
+	}
+	UartPrintf("\n");
+
+	Tests tests;
+	if (!tests.RunAllTests())
+	{
+		i = 5000;
+		while (i-- > 0)
+		{
+			UartPrintf("\rTest fail. Spinning - %d    ", i);
+			bcm2835_gpio_clr(16);
+			bcm2835_st_delay(bcm2835_st_read(), 500000);
+			bcm2835_gpio_set(16);
+			bcm2835_st_delay(bcm2835_st_read(), 500000);
+		}
+		UartPrintf("\n");
+	}
+
 	InstrumentCluster cluster;
 	GraphicsContextPi ctx;
 	FramebufferProperties properties;
@@ -38,10 +56,18 @@ int main(int argc, char** argv)
 	{
 		UartPrintf("Calling cluster.Init()\n");
 		//bcm2835_st_delay(bcm2835_st_read(), 500000);
-		cluster.Init(properties.mGeometry);
+		bool res = cluster.Init(properties.mGeometry);
+		if (res)
+		{
+			UartPrintf("Cluster.Init() succeeded\n");
+		}
+		else
+		{
+			UartPrintf("Cluster.Init() failed!\n");
+		}
 		cluster.GetPrimarySurface().Invalidate(properties.mGeometry);
 		bool on = true;
-		while (1)
+		while (res)
 		{
 			if (on)
 				bcm2835_gpio_clr(16);

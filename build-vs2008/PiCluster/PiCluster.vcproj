@@ -217,6 +217,10 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath="..\..\source\Tests.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\Trig.cpp"
 				>
 			</File>
@@ -268,6 +272,10 @@
 			</File>
 			<File
 				RelativePath=".\targetver.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\Tests.h"
 				>
 			</File>
 			<File

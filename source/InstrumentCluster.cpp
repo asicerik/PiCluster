@@ -59,44 +59,31 @@ InstrumentCluster::Init(const Rect& box)
 		// Background - we use a cluster element so that we get all the graphics functions
 		mBackground.Init(box);
 		mBackground.SetGradientAngle(0);
-		mBackground.AddGradientStop(0.0, eOpaque, 0, 0, 96);
+		mBackground.AddGradientStop(0.0, eOpaque, 0, 0, 64);
 		mBackground.AddGradientStop(1.0, eOpaque, 0, 0, 0);
 
-		// Draw directly to the screen
 		mBackground.GetGraphicsContext().SetSurfaceSelection(eFront);
 		mElements.push_back(&mBackground);
 
 		// A test element
 		Rect box;
-		box.x = box.y = 0;
-		box.w = box.h = 100;
-
-		mTest.Init(box);
-		mTest.SetGradientAngle(0);
-		mTest.AddGradientStop(0.0, eOpaque, 128, 128, 128 );	// med grey
-		mTest.AddGradientStop(1.0, eOpaque, 192, 192, 192 );	// light grey
-
-		// Draw directly to the screen
-		mTest.GetGraphicsContext().SetSurfaceSelection(ePrimaryFront);
-		//mElements.push_back(&mTest);
 
 		// Speedometer
 		box.x = box.y = 0;
 		box.w = box.h = 360;
 		Point point;
-		point.x = 200;
-		point.y = 50;
-
+		point.x = 0;
+		point.y = 0;
 		mSpeedo.Init(box);
 		mSpeedo.SetMinMax(0, 160, 5, 10, -120, 120);
 
-		//mSpeedo.SetLocation(point);
+		mSpeedo.SetLocation(point);
 		mElements.push_back(&mSpeedo);
 		
-		point.x = 1280 - 200 - box.w;
-		point.y = 50;
-		mTach.Init(box);
-		mTach.SetLocation(point);
+//		point.x = 1280 - 200 - box.w;
+//		point.y = 50;
+//		mTach.Init(box);
+//		mTach.SetLocation(point);
 		//mElements.push_back(&mTach);
 
 		res = true;
@@ -111,7 +98,8 @@ InstrumentCluster::Update()
 	static int16_t speed = 0;
 	do
 	{
-		mSpeedo.SetValue(speed++);
+		mSpeedo.SetValue(speed);
+		speed++;
 		if (speed > 160)
 		{
 			speed = 0;

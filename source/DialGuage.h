@@ -2,7 +2,7 @@
 
 #include "Region.h"
 
-struct DialProperties
+struct PACK DialProperties
 {
 	int16_t		min;
 	int16_t		max;
@@ -10,12 +10,13 @@ struct DialProperties
 	int16_t		endAngle;
 };
 
-class DialGuage : public ClusterElement
+class ALIGN DialGuage : public ClusterElement
 {
 public:
 	DialGuage();
 	virtual ~DialGuage();
 	virtual bool Init(const Rect& box, bool isPrimary=false, bool doubleBuffer=false);
+	virtual void SetLocation(const Point& loc);
 	virtual Region Update();
 	virtual Region Draw();
 	void SetValue(uint16_t val);

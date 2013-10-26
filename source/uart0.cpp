@@ -1,7 +1,11 @@
 #include "stdint.h"
+#include "stdio.h"
 #include "stdarg.h"
 #include "uart0.h"
 #ifdef WIN32
+#include "Windows.h"
+#include <conio.h>
+
 void UartPutChar(char val)	{}
 
 char UartGetChar()			{ return '*'; }
@@ -10,7 +14,18 @@ void UartFlushRxFifo()		{}
 
 void UartInit()				{}
 
-int UartPrintf(const char *fmt, ...)		{ return 0; }
+int UartPrintf(const char *fmt, ...)		
+{
+	va_list args;
+
+	va_start(args, fmt);
+	char text[1024];
+	int ret = vsprintf_s(text, 1024, fmt, args);
+	OutputDebugStringA(text);
+	va_end(args);
+	
+	return ret;
+}
 
 int UartPrintInt(int i, eIntegerBase base)	{ return 0; }
 
