@@ -54,7 +54,10 @@ InstrumentCluster::Init(const Rect& box)
 		mExtents = box;
 
 		// The primary surface is where we draw images to the screen
-		mPrimarySurface.Init(box, true);
+		mPrimarySurface.Init(box, true, true);
+
+		// We draw to the back surface to get double buffering
+		mPrimarySurface.GetGraphicsContext().SetSurfaceSelection(ePrimaryBack);
 
 		// Background - we use a cluster element so that we get all the graphics functions
 		mBackground.Init(box);
@@ -72,19 +75,44 @@ InstrumentCluster::Init(const Rect& box)
 		box.x = box.y = 0;
 		box.w = box.h = 360;
 		Point point;
-		point.x = 0;
-		point.y = 0;
+		point.x = 200;
+		point.y = 50;
 		mSpeedo.Init(box);
 		mSpeedo.SetMinMax(0, 160, 5, 10, -120, 120);
 
 		mSpeedo.SetLocation(point);
 		mElements.push_back(&mSpeedo);
 		
-//		point.x = 1280 - 200 - box.w;
-//		point.y = 50;
-//		mTach.Init(box);
-//		mTach.SetLocation(point);
-		//mElements.push_back(&mTach);
+		point.x = 1280 - 200 - box.w;
+		point.y = 50;
+		mTach.Init(box);
+		mTach.SetValue(800);
+		mTach.SetMinMax(0, 8000, 250, 1000, -120, 120);
+		mTach.AddColorRange(Color32(200, 0, 0, eOpaque), 7000, 8000);
+		mTach.AddColorRange(Color32(0xff, 0x33, 0, eOpaque), 6500, 7000);
+
+		mTach.SetLocation(point);
+		mElements.push_back(&mTach);
+
+		// Caps for dials
+		int16_t capRadius = 30;
+		box.x = 0;
+		box.y = 0;
+		box.w = capRadius * 2;
+		box.h = capRadius * 2;
+		point.x = 200 + 180 - capRadius;
+		point.y = 50  + 180 - capRadius;
+		mSpeedoCap.Init(box);
+		mSpeedoCap.SetLocation(point);
+		mSpeedoCap.GetGraphicsContext().SetSurfaceSelection(eFront);
+		mElements.push_back(&mSpeedoCap);
+
+		point.x = 1280 - 200 - 180 - capRadius;
+		point.y = 50  + 180 - capRadius;
+		mTachCap.Init(box);
+		mTachCap.SetLocation(point);
+		mTachCap.GetGraphicsContext().SetSurfaceSelection(eFront);
+		mElements.push_back(&mTachCap);
 
 		res = true;
 	} while (false);
@@ -94,15 +122,18 @@ InstrumentCluster::Init(const Rect& box)
 bool
 InstrumentCluster::Update()
 {
+	PROFILE_START(GraphicsContextBase::mProfileData.mUpdate)
+
 	bool res = false;
-	static int16_t speed = 0;
+	static int16_t rpm = 0;
 	do
 	{
-		mSpeedo.SetValue(speed);
-		speed++;
-		if (speed > 160)
+		mTach.SetValue(rpm);
+		mSpeedo.SetValue(rpm / 100);
+		rpm += 50;
+		if (rpm > 8000)
 		{
-			speed = 0;
+			rpm = 0;
 		}
 
 		// Go through all the elements in top-down Z order
@@ -119,16 +150,30 @@ InstrumentCluster::Update()
 			// if it completely contains the invalidated region.
 			// It may also make the invalid region bigger
 			backgroundUpdate = (*iter)->Update();
+
+//			UartPrintf("InstrumentCluster::Update() : backgroundUpdate = %d,%d - %d,%d. iter=%p\n",
+//					backgroundUpdate.GetDirtyRect().x,
+//					backgroundUpdate.GetDirtyRect().y,
+//					backgroundUpdate.GetDirtyRect().w,
+//					backgroundUpdate.GetDirtyRect().h,
+//					*iter
+//					);
 		}
 
 		res = true;
 	} while (false);
+
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mUpdate)
+
 	return res;
 }
 
 void
 InstrumentCluster::Draw()
 {
+	PROFILE_START(GraphicsContextBase::mProfileData.mDraw)
+
+//	UartPrintf("InstrumentCluster::Draw()\n");
 
 	// Go through all the elements in bottoms-up Z order
 	// Elements will return a region indicating the area it updated
@@ -145,5 +190,7 @@ InstrumentCluster::Draw()
 		Region drawResult = (*iter)->Draw();
 		mDirty = Region::CombineRegion(mDirty, drawResult, Region::eOr);
 	}
+
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mDraw)
 }
 

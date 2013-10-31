@@ -44,7 +44,8 @@ public:
 protected:
 	void CoalesceRects();
 
-	std::vector<Rect>	mDirtyRects;
+	int32_t				mAlign		ALIGN;			//!< Make sure everything below is 32b aligned
+	std::vector<Rect>	mDirtyRects ALIGN;
 	size_t				mMaxRects;		//!< The max number of rects we will allow. We will coelesce them after that
 };
 

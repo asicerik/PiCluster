@@ -7,6 +7,8 @@
 #include "Tests.h"
 
 #define MAX_LOADSTRING 100
+//#define ZOOM
+//#define SECOND_SCREEN
 
 // Global Variables:
 HINSTANCE hInst;								// current instance
@@ -114,9 +116,19 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    hInst = hInstance; // Store instance handle in our global variable
 
+#if defined(ZOOM) && defined(SECOND_SCREEN)
    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+	1920 + 0, 0, 1920, 1000, NULL, NULL, hInstance, NULL);
+#elif defined(ZOOM) && !defined(SECOND_SCREEN)
+    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+      0, 0, 1920, 1000, NULL, NULL, hInstance, NULL);
+#elif !defined(ZOOM) && defined(SECOND_SCREEN)
+    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
       1920 + 296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
-//      296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
+#else
+    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+      296, 266, 1296, 538, NULL, NULL, hInstance, NULL);
+#endif
 
    if (!hWnd)
    {
@@ -142,7 +154,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	   // Read the file size
 	   uint32_t fileSize;
 	   fread(&fileSize, 1, 4, fp);
-	   fileSize = ntohl(fileSize);
+	   fileSize = fileSize;
 	   gFontErasDemi18 = (FontDatabaseFile*)malloc(fileSize);
 	   gFontErasDemi18->fileSize = fileSize;
 	   fread(&gFontErasDemi18->fontName, 1, fileSize - 4, fp);
@@ -165,6 +177,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;
 	HDC hdc;
+	static uint64_t lastUpdateTimeMs = GetTickCount64();
+	static int frames = 0;
+	static float fps = 0.0f;
 
 	switch (message)
 	{
@@ -197,9 +212,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			winRect.top   = dirty.y;
 			winRect.right = dirty.x + dirty.w;
 			winRect.bottom= dirty.y + dirty.h;
-			BitBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, SRCCOPY);
-			//StretchBlt(hdc, 0, 0, 1280, 480, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
+			if (ps.rcPaint.left < winRect.left)
+				winRect.left = ps.rcPaint.left;
+			if (ps.rcPaint.top < winRect.top)
+				winRect.top = ps.rcPaint.top;
+			if (ps.rcPaint.bottom > winRect.bottom)
+				winRect.bottom = ps.rcPaint.bottom;
+			if (ps.rcPaint.right > winRect.right)
+				winRect.right= ps.rcPaint.right;
 
+			// Copy the back buffer to the front buffer
+			ctx->CopyBackToFront(dirty);
+
+#ifdef ZOOM
+			StretchBlt(hdc, 0, 0, 2560, 960, ctx->GetDC(), 0, 0, 640, 240, SRCCOPY);
+#else
+			BitBlt(hdc, winRect.left, winRect.top, winRect.right-winRect.left, winRect.bottom-winRect.top, ctx->GetDC(), winRect.left, winRect.top, SRCCOPY);
+#endif
 			SelectObject(hdc, GetStockObject(NULL_BRUSH));
 			SelectObject(hdc, GetStockObject(WHITE_PEN));
 
@@ -207,8 +236,61 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			//Rectangle(hdc, winRect.left, winRect.top, winRect.right, winRect.bottom);
 			EndPaint(hWnd, &ps);
 
+			frames++;
+			if ((GetTickCount64() - lastUpdateTimeMs) > 1000)
+			{
+				float interval = (GetTickCount64() - lastUpdateTimeMs) / 1000.0;
+				fps = frames / interval;
+				frames = 0;
+				lastUpdateTimeMs = GetTickCount64();
+				ctx->mProfileData.Snapshot(true);
+			}
+
+			hdc = GetDC(hWnd);
+			HFONT font = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+									CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FF_DONTCARE | DEFAULT_PITCH, L"Courier New");
+			
+			SelectObject(hdc, font);
+			SetBkMode(hdc, TRANSPARENT);
+			SetTextColor(hdc, RGB(200, 200, 200));
+			int x = 10;
+			int y = 10;
+			int deltaY = 15;
+			char text[256];
+			sprintf_s(text, 256, "%2.1f FPS", fps);
+			BitBlt(hdc, x, y, 200, 200, ctx->GetDC(), x, y, SRCCOPY);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "Update:         %lld", ctx->mProfileData.mUpdate.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "Draw:           %lld", ctx->mProfileData.mDraw.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "CopyToPrimary:  %lld", ctx->mProfileData.mCopyToPrimary.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "CopyBackToFront:%lld", ctx->mProfileData.mCopyBackToFront.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "DrawTrapezoid:  %lld", ctx->mProfileData.mDrawTrapezoid.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "DrawLine:       %lld", ctx->mProfileData.mDrawLine.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "DrawText:       %lld", ctx->mProfileData.mDrawText.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "FloodFill:      %lld", ctx->mProfileData.mFloodFill.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			sprintf_s(text, 256, "Region:         %lld", ctx->mProfileData.mRegion.GetSnapshot()/1000L);
+			TextOutA(hdc, x, y, text, strlen(text));	y += deltaY;
+
+			DeleteDC(hdc);
 			Sleep(1);
-			::InvalidateRect(hWnd, &winRect, false);
+			//::InvalidateRect(hWnd, &winRect, false);
 			::InvalidateRect(hWnd, NULL, false);
 		}
 		break;

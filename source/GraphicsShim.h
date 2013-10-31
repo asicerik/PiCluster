@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <string>
+#include "dma.h"
+#include "Timer.h"
 
 static const uint32_t kMaxFramebufferWidth	= 4096;
 static const uint32_t kMaxFramebufferHeight	= 4096;
@@ -13,17 +15,10 @@ static const uint32_t kMaxFramebufferDepth	= 32;
 
 #define Clip(x,min,max) ((x)<(min)?(min):((x)>(max)?(max):(x)))
 
-#ifdef WIN32
-#define PACK
-#define ALIGN
-#else
-#define PACK __attribute__((__packed__))
-#define ALIGN __attribute__ ((aligned (4)))		// 32 bit alignment on ARM
-#endif
-
 struct PACK Point
 {
 	Point() {};
+
 	// The default copy constructor does not seem to work in Pi-land, so...
 	Point(const Point& in)
 	{
@@ -67,18 +62,18 @@ struct PACK Rect
 		w = wIn;
 		h = hIn;
 	}
-//	Rect& operator=(const Rect &rhs)
-//	{
-//	    // Check for self-assignment!
-//	    if (this == &rhs)      // Same object?
-//	      return *this;        // Yes, so skip assignment, and just return *this.
-//
-//	    this->x = rhs.x;
-//	    this->y = rhs.y;
-//	    this->w = rhs.w;
-//	    this->h = rhs.h;
-//	    return *this;
-//	}
+	Rect& operator=(const Rect &rhs)
+	{
+	    // Check for self-assignment!
+	    if (this == &rhs)      // Same object?
+	      return *this;        // Yes, so skip assignment, and just return *this.
+
+	    this->x = rhs.x;
+	    this->y = rhs.y;
+	    this->w = rhs.w;
+	    this->h = rhs.h;
+	    return *this;
+	}
 	int16_t		x;
 	int16_t		y;
 	int16_t		w;
@@ -103,7 +98,28 @@ struct Color32
 	uint8_t		r;
 	uint8_t		a;
 	Color32f ToColor32f();
-	Color32	 AlphaBlend(Color32 background);
+	inline Color32	 AlphaBlend(Color32 background)
+	{
+		Color32 ret;
+		// Special cases
+		if (a == 255)
+			return *this;
+		if (a == 0)
+			return background;
+
+		uint32_t alpha = a + 1;
+		uint32_t inv_alpha = 256 - a;
+		ret.r = (unsigned char)((alpha * r + inv_alpha * background.r) >> 8);
+		ret.g = (unsigned char)((alpha * g + inv_alpha * background.g) >> 8);
+		ret.b = (unsigned char)((alpha * b + inv_alpha * background.b) >> 8);
+		ret.a = 255;
+		//uint8_t backgroundAlpha = 255 - a;
+		//ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
+		//ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
+		//ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
+		//ret.a = 255;
+		return ret;
+	}
 	bool operator==(const Color32 &rhs)
 	{
 		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
@@ -135,7 +151,24 @@ struct PACK Color32
 	uint8_t		b;
 	uint8_t		a;
 	Color32f ToColor32f();
-	Color32	 AlphaBlend(Color32 background);
+	inline Color32	 AlphaBlend(Color32 background)
+	{
+		Color32 ret;
+		// Special cases
+		if (a == 255)
+			return *this;
+		if (a == 0)
+			return background;
+
+		uint8_t backgroundAlpha = 255 - a;
+		ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
+		ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
+		ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
+		ret.a = 255;
+		return ret;
+	}
+
+
 	inline bool CompareSansAlpha(const Color32 in)
 	{
 		if ((r == in.r) && (g == in.g) && (b == in.b))
@@ -253,19 +286,79 @@ struct PACK FontDatabaseFile
 	uint32_t	fileSize;				//!< Total filesize including this header
 	char		fontName[32];			//!< NULL terminated font name. Max 31 characters
 	uint8_t		fontHeight;				//!< Font height
+	uint8_t		fontAscent;				//!< Number of pixels above the baseline
+	uint8_t		fontDescent;			//!< Number of pixels below the baseline
 	uint8_t		startChar;				//!< First ASCII character in the file (typically 32=space)
 	uint8_t		endChar;				//!< Last ASCII character in the file (typically 126=~)
 	uint8_t		columns;				//!< The number of characters per line
 	uint8_t		rows;					//!< The number of lines
 	uint8_t		cellWidth;				//!< The width of each character cell in the image
 	uint8_t		cellHeight;				//!< The width of each character cell in the image
-	uint8_t		reserved;				//!< For packing
+	uint8_t		padding1;				//!< For alignment
+	uint8_t		padding2;				//!< For alignment
+	uint8_t		widthArray[256];		//!< The drawn width of each char (starting from "startChar", not 0
 	uint8_t		alphaArray;				//!< This is actually an array of alpha values. Size = (endChar-startChar)+1
 										//!< 255 = fully opaque. 0 = transparent (background)
 };
 
+// ProfileData is used to profile the code and measure where the bottlenecks are
+struct ProfileData
+{
+	ProfileData()	{ Clear();	}
+	void Clear()
+	{
+		mUpdate.Reset();
+		mDraw.Reset();
+		mCopyToPrimary.Reset();
+		mCopyBackToFront.Reset();
+		mDMA.Reset();
+		mFillRectangle.Reset();
+		mGradientLine.Reset();
+		mGradientRectangle.Reset();
+		mDrawLine.Reset();
+		mDrawTrapezoid.Reset();
+		mDrawArc.Reset();
+		mFloodFill.Reset();
+		mDrawText.Reset();
+		mRegion.Reset();
+	}
+	void Snapshot(bool clear)
+	{
+		mUpdate.Snapshot(clear);
+		mDraw.Snapshot(clear);
+		mCopyToPrimary.Snapshot(clear);
+		mCopyBackToFront.Snapshot(clear);
+		mDMA.Snapshot(clear);
+		mFillRectangle.Snapshot(clear);
+		mGradientLine.Snapshot(clear);
+		mGradientRectangle.Snapshot(clear);
+		mDrawLine.Snapshot(clear);
+		mDrawTrapezoid.Snapshot(clear);
+		mDrawArc.Snapshot(clear);
+		mFloodFill.Snapshot(clear);
+		mDrawText.Snapshot(clear);
+		mRegion.Snapshot(clear);
+	}
+
+	// These are all cumulative times (in usec) spent in each routine
+	Timer	mUpdate;
+	Timer	mDraw;
+	Timer	mCopyToPrimary;
+	Timer	mCopyBackToFront;
+	Timer	mDMA;
+	Timer	mFillRectangle;
+	Timer	mGradientLine;
+	Timer	mGradientRectangle;
+	Timer	mDrawLine;
+	Timer	mDrawTrapezoid;
+	Timer	mDrawArc;
+	Timer	mFloodFill;
+	Timer	mDrawText;
+	Timer	mRegion;
+};
+
 class Region;
-class ALIGN GraphicsContextBase
+class GraphicsContextBase
 {
 public:
 	static Color32	kMagenta;
@@ -278,6 +371,7 @@ public:
 	virtual void	FreeFramebuffer() = 0;
 	virtual void	FillRectangle(Rect rect, Color32 argb);
 	virtual void	CopyToPrimary(std::vector<Rect> rects, bool alphaBlend=false);
+	virtual void	CopyBackToFront(Rect& rect);
 	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
 	virtual void	GradientRectangle(Rect location, int16_t angle, std::vector<GradientStop>& stops);
 	virtual void	DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
@@ -289,8 +383,14 @@ public:
 								  int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill,
 								  AntiAliasEdges aaEdges);
 	virtual void	DrawArc(Color32 color, Point origin, int16_t startAngleWide, int16_t endAngleWide, int16_t radius);
+	virtual void	DrawCircle(Color32 color, Point origin, int16_t radius, bool fill);
 	virtual void	FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor);
-	virtual void	DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color);
+	virtual void	DrawEmboss(Color32 colorMax, Point origin, int16_t innerRadius, int16_t outerRadius, 
+					  int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide, int32_t stepAngleWide=20);
+
+	// Text functions
+	virtual int16_t	GetTextDrawnLength(FontDatabaseFile* font, std::string& text);
+	virtual void	DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color, bool alphaBlend);
 	
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
@@ -314,6 +414,9 @@ public:
 
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
 
+	// Profiling
+	static ProfileData		mProfileData;			//!< Storage for our profiling info
+
 	// Test stuff
 	bool					mTestMode;				//!< If true, apply test settings
 
@@ -321,6 +424,7 @@ protected:
 	virtual void	FloodFillLeft(uint32_t intColor, Point* start, int16_t arraySize);
 	virtual void	FloodFillRight(uint32_t intColor, Point* start, int16_t arraySize);
 
+	int32_t					mALign	ALIGN;			//!< Make sure everything below is 32b aligned
 	static GraphicsContextBase*	mPrimaryContext;	//!< Pointer to the primary surface
 	GraphicsContextBase*	mSelectedSurface;		//!< Pointer to the drawing surface
 	SurfaceSelection		mSurfaceSelection;		//!< Which surface are we drawing to?
@@ -330,8 +434,10 @@ protected:
 	FramebufferProperties	mFBProperties;			//!< Properties for this framebuffer
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
 	Point					mScreenOffset;			//!> x/y offset relative to primary surface
-	bool					mAntiAlias;				//!< If true, apply anti-aliasing
 	Region*					mDirtyRegion;			//!< If non-null, use this region to track dirty rects
+
+	// Put all the bools/non-aligned stuff at the end
+	bool					mAntiAlias;				//!< If true, apply anti-aliasing
 };
 
 #ifdef WIN32
@@ -429,6 +535,7 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties);
 	virtual void	FreeFramebuffer();
 	virtual void	FillRectangle(Rect rect, Color32 argb);
+	virtual void	CopyBackToFront(Rect& rect);
 
 private:
 	bool CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDesc);

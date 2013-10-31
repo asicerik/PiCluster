@@ -35,6 +35,7 @@ volatile uint32_t *bcm2835_spi0 = MAP_FAILED;
 volatile uint32_t *bcm2835_bsc0 = MAP_FAILED;
 volatile uint32_t *bcm2835_bsc1 = MAP_FAILED;
 volatile uint32_t *bcm2835_st	= MAP_FAILED;
+volatile uint32_t *bcm2835_eemc	= MAP_FAILED;
 
 
 // This variable allows us to test on hardware other than RPi.
@@ -1031,6 +1032,9 @@ int bcm2835_init(void)
 
     // ST
     bcm2835_st = (uint32_t*)BCM2835_ST_BASE;
+
+    // EEMC
+    bcm2835_eemc = (uint32_t*)BCM2835_EEMC_BASE;
 
     ok = 1;
 

@@ -14,11 +14,11 @@
 #include "Region.h"
 #include "uart0.h"
 
-GraphicsContextBase*		GraphicsContextBase::mPrimaryContext = NULL;
 
 // Static vars
-//Color32	GraphicsContextBase::kMagenta(202, 31, 123, 255);
-Color32	GraphicsContextBase::kMagenta(202, 31, 123, eTransparent);
+GraphicsContextBase*		GraphicsContextBase::mPrimaryContext = NULL;
+Color32						GraphicsContextBase::kMagenta(202, 31, 123, eTransparent);
+ProfileData					GraphicsContextBase::mProfileData;
 
 Color32f 
 Color32::ToColor32f()
@@ -29,18 +29,6 @@ Color32::ToColor32f()
 	out.g = (float)g;
 	out.b = (float)b;
 	return out;
-}
-
-Color32	 
-Color32::AlphaBlend(Color32 background)
-{
-	Color32 ret;
-	uint8_t backgroundAlpha = 255 - a;
-	ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
-	ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
-	ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
-	ret.a = 255;
-	return ret;
 }
 
 Color32 
@@ -62,6 +50,7 @@ GraphicsContextBase::GraphicsContextBase()
 	mFrontBufferPtr		= NULL;
 	mBackBufferPtr		= NULL;
 	mScreenOffset.x = mScreenOffset.y = 0;
+	mDirtyRegion		= NULL;
 }
 
 GraphicsContextBase* 
@@ -132,7 +121,7 @@ GraphicsContextBase::ScreenToClient(const Rect& screenRect)
 void
 GraphicsContextBase::GradientRectangle(Rect location, int16_t angle, std::vector<GradientStop>& stops)
 {
-	UartPrintf("GradientRectangle()\n");
+	//UartPrintf("GradientRectangle()\n");
 	if (stops.empty())
 		return;
 
@@ -168,13 +157,13 @@ GraphicsContextBase::GradientRectangle(Rect location, int16_t angle, std::vector
 	right  = Clip(right, 0, mFBProperties.mGeometry.w-1);
 	bottom = Clip(bottom, 0, mFBProperties.mGeometry.h-1);
 
-	UartPrintf("GradientRectangle() : Rect=%d,%d - %d,%d. angle=%d,stops=%d\n",
-			location.x,
-			location.y,
-			right,
-			bottom,
-			(int)angle,
-			(int)stops.size());
+//	UartPrintf("GradientRectangle() : Rect=%d,%d - %d,%d. angle=%d,stops=%d\n",
+//			location.x,
+//			location.y,
+//			right,
+//			bottom,
+//			(int)angle,
+//			(int)stops.size());
 
 	for (int16_t y=location.y; y<=bottom;)
 	{
@@ -211,8 +200,11 @@ GraphicsContextBase::FillRectangle(Rect rect, Color32 argb)
 void
 GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 {
+	// We can't copy to ourselves
 	if (!mPrimaryContext)
 		return;
+
+	PROFILE_START(mProfileData.mCopyToPrimary)
 
 //	UartPrintf("CopyToPrimary: w=%d,h=%d,stride=%d,ptr=%p,pw=%d,ph=%d,pstride=%d,pptr=%p\n",
 //			mFBProperties.mGeometry.w,
@@ -249,7 +241,7 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 		}
 		else if (mScreenOffset.x >= mFBProperties.mGeometry.w)
 		{
-			srcRect.w -= (mScreenOffset.x - mFBProperties.mGeometry.w);
+//			srcRect.w -= (mScreenOffset.x - mFBProperties.mGeometry.w);
 		}
 		if (mScreenOffset.y < 0)
 		{
@@ -258,15 +250,15 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 		}
 		else if (mScreenOffset.y >= mFBProperties.mGeometry.h)
 		{
-			srcRect.h -= (mScreenOffset.y - mFBProperties.mGeometry.h);
+//			srcRect.h -= (mScreenOffset.y - mFBProperties.mGeometry.h);
 		}
 		srcRect.x = Clip(srcRect.x, 0, (mFBProperties.mGeometry.w-1));
 		srcRect.y = Clip(srcRect.y, 0, (mFBProperties.mGeometry.h-1));
 		srcRect.w = Clip(srcRect.w, 0, mFBProperties.mGeometry.w);
 		srcRect.h = Clip(srcRect.h, 0, mFBProperties.mGeometry.h);
 
-		UartPrintf("CopyToPrimary: srcRect=%d,%d : %d,%d\n", srcRect.x, srcRect.y, srcRect.w, srcRect.h);
-		UartPrintf("CopyToPrimary: iter=%d,%d : %d,%d\n", iter->x, iter->y, iter->w, iter->h);
+		//UartPrintf("CopyToPrimary: srcRect=%d,%d : %d,%d\n", srcRect.x, srcRect.y, srcRect.w, srcRect.h);
+		//UartPrintf("CopyToPrimary: iter=%d,%d : %d,%d\n", iter->x, iter->y, iter->w, iter->h);
 
 		Rect dstRect = *iter;
 		FramebufferProperties primaryFbProps = mPrimaryContext->GetFramebufferProperties();
@@ -307,8 +299,9 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 		dstRect.w = Clip(dstRect.w, 0, primaryFbProps.mGeometry.w);
 		dstRect.h = Clip(dstRect.h, 0, primaryFbProps.mGeometry.h);
 
-		UartPrintf("CopyToPrimary: dstRect=%d,%d : %d,%d\n", dstRect.x, dstRect.y, dstRect.w, dstRect.h);
+		//UartPrintf("CopyToPrimary: dstRect=%d,%d : %d,%d\n", dstRect.x, dstRect.y, dstRect.w, dstRect.h);
 
+#ifdef WIN32
 		for (int16_t y = 0; y < srcRect.h; y++)
 		{
 			Color32* src = mCurrBufferPtr + srcRect.x + (y + srcRect.y) * (mFBProperties.mStride >> 2);
@@ -321,19 +314,76 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 					*dst = src->AlphaBlend(*dst);
 					src++;
 					dst++;
+					Sleep(0);
 				}
 			}
 			else
 			{
 				memcpy(dst, src, (srcRect.w) * 4);
 			}
-#ifdef WIN32
-			if ((y % 8) == 0)
+			if ((rand() % 1000) < 50)
 				Sleep(1);
+		}
+#else
+		if (alphaBlend)
+		{
+			for (int16_t y = 0; y < srcRect.h; y++)
+			{
+				Color32* src = mCurrBufferPtr + srcRect.x + (y + srcRect.y) * (mFBProperties.mStride >> 2);
+				Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + dstRect.x + (y + dstRect.y) * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
+				for (int16_t x = 0; x < srcRect.w; x++)
+				{
+					*dst = src->AlphaBlend(*dst);
+					src++;
+					dst++;
+				}
+			}
+
+		}
+		else
+		{
+			// Use hardware DMA transfer
+			Color32* src = mCurrBufferPtr;
+			Color32* dst = mPrimaryContext->GetSelectedFramebuffer();
+			Rect newDstRect;
+			newDstRect.x = dstRect.x;
+			newDstRect.y = dstRect.y;
+			newDstRect.w = srcRect.w;
+			newDstRect.h = srcRect.h;
+			dmaBitBlt(dst, newDstRect, mPrimaryContext->GetFramebufferProperties().mStride, src, srcRect, mFBProperties.mStride);
+		}
 #endif
+	}
+	PROFILE_STOP(mProfileData.mCopyToPrimary)
+}
+
+void
+GraphicsContextBase::CopyBackToFront(Rect& rect)
+{
+	PROFILE_START(mProfileData.mCopyBackToFront)
+#ifdef WIN32
+	for (int16_t y = 0; y < mFBProperties.mGeometry.h; y++)
+	{
+		Color32* src = mBackBufferPtr + y * (mFBProperties.mStride >> 2);
+		Color32* dst = mFrontBufferPtr + y * (mFBProperties.mStride >> 2);
+		memcpy(dst, src, mFBProperties.mStride);
+		if ((rand() % 1000) < 10)
+			Sleep(1);
+	}
+#else
+	for (int16_t y = rect.y; y < (rect.y + rect.h); y++)
+	{
+		Color32* src = mBackBufferPtr + rect.x + y * (mFBProperties.mStride >> 2);
+		Color32* dst = mFrontBufferPtr + rect.x +  y * (mFBProperties.mStride >> 2);
+		for (int16_t x = 0; x < rect.w; x++)
+		{
+			*dst++ = *src++;
 		}
 	}
+#endif
+	PROFILE_STOP(mProfileData.mCopyBackToFront)
 }
+
 void
 GraphicsContextBase::GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y)
 {
@@ -382,6 +432,7 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 							  Point* points, int16_t& pointsSize,
 							  AntiAliasLineMode aaMode)
 {
+	PROFILE_START(mProfileData.mDrawLine)
 	const int8_t scale = 8;
 	const int32_t divisor = 1 << scale;
 	FramebufferProperties props = GetSelectedSurface()->GetFramebufferProperties();
@@ -403,7 +454,10 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 	else
 		steps = (-stepX > -stepY) ? -stepX : -stepY;
 	if (steps == 0)
+	{
+		PROFILE_STOP(mProfileData.mDrawLine)
 		return;
+	}
 
 	int16_t xDelta = ((x1 - x0) << scale) / steps;
 	int16_t yDelta = ((y1 - y0) << scale) / steps;
@@ -433,7 +487,7 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 		// If drawing directly to the screen, we need to alpha blend
 		if (mSurfaceSelection == ePrimaryFront || mSurfaceSelection == ePrimaryBack)
 		{
-			*ptr = color;//.AlphaBlend(*ptr);	This breaks fill due to the boundary not being the proper color ;(
+			*ptr = color;//.AlphaBlend(*ptr);	// This breaks fill due to the boundary not being the proper color ;(
 		}
 		else
 		{
@@ -441,10 +495,14 @@ GraphicsContextBase::DrawLine(Color32 color, int16_t x0, int16_t y0, int16_t x1,
 		}
 		x += xDelta;
 		y += yDelta;
-		//Sleep(0);
 	}
 	if (points)
 		pointsSize = savedPoints;
+#ifdef WIN32
+	if ((rand() % 1000) < 100)
+		Sleep(1);
+#endif
+	PROFILE_STOP(mProfileData.mDrawLine)
 }
 
 void
@@ -452,6 +510,8 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 								   int16_t outerRadius, int32_t startArcWide, int32_t endArcWide, bool fill,
 								   AntiAliasEdges aaEdges)
 {
+	PROFILE_START(mProfileData.mDrawTrapezoid)
+
 	int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide);
 	bool aaMode1 = ((clipped >= 0) && (clipped < 540)) ? true : 
 		((clipped > 1260) && (clipped < 1440)) ? true : false;
@@ -466,11 +526,30 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	Point p0, p1, p2, p3;
 	int16_t p0ArraySize, p1ArraySize, p2ArraySize, p3ArraySize;
 	p0ArraySize = p1ArraySize = p2ArraySize = p3ArraySize = (int16_t)((startArcWide + endArcWide) >> 3) + 2 * (outerRadius - innerRadius);
-	Point* p0Array = new Point[p0ArraySize];
-	Point* p1Array = new Point[p1ArraySize];
-	Point* p2Array = new Point[p2ArraySize];
-	Point* p3Array = new Point[p3ArraySize];
+
+//	UartPrintf("DrawTrapezoid ArraySize=%d, startArcWide=%d, endArcWide=%d, outerRadius=%d, innerRadius=%d\n",
+//			p0ArraySize, startArcWide, endArcWide, outerRadius, innerRadius);
+
+	Point* p0Array = NULL;
+	Point* p1Array = NULL;
+	Point* p2Array = NULL;
+	Point* p3Array = NULL;
+
+	try
+	{
+		p0Array = new Point[p0ArraySize];
+		p1Array = new Point[p1ArraySize];
+		p2Array = new Point[p2ArraySize];
+		p3Array = new Point[p3ArraySize];
+	}
+	catch (...)
+	{
+		UartPrintf("new() failed in DrawTrapezoid. ArraySize=%d", p0ArraySize);
+		return;
+	}
 	
+//	UartPrintf("p0Array=%p, p1Array=%p, p02rray=%p, p3Array=%p\n", p0Array, p1Array, p2Array, p3Array);
+
 	clipped = (int32_t)Trig::ClipWideDegree(angleWide - (startArcWide >> 1));
 	p0.x = origin.x + (int16_t)((Trig::mSinWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
 	p0.y = origin.y + (int16_t)((-Trig::mCosWideInt[clipped] * innerRadius - (Trig::kTrigScale >> 2)) >> Trig::kTrigShift);
@@ -507,8 +586,8 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 	// Are we tracking dirty rects?
 	if (mDirtyRegion)
 	{
-		// Simple box for now
-		Rect rect;
+		// Calculate a bounding box for the whole thing
+		Rect rect ALIGN;
 		int32_t clipped = (int32_t)Trig::ClipWideDegree(angleWide) >> 2;
 		if (clipped < 90)
 		{
@@ -538,7 +617,49 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 			rect.w = p3.x - p1.x + 1;
 			rect.h = p0.y - p2.y + 1;
 		}
-		mDirtyRegion->AddRect(rect);
+		int16_t length = outerRadius - innerRadius;
+//		if (length > 0)
+//		{
+//			//int16_t thresh = 4 * maxEnd;	// If the box is wider/taller than this, break it up
+//			//int16_t wCuts = rect.w / thresh;
+//			//int16_t hCuts = rect.h / thresh;
+//			//if (wCuts > 1 && hCuts > 1)
+//			//{
+//			//}
+//			int16_t maxEnd = p1ArraySize > p3ArraySize ? p1ArraySize : p3ArraySize;
+//			int16_t minSize = 16;
+//			int16_t wCuts = rect.w / minSize;
+//			int16_t hCuts = rect.h / minSize;
+//			int16_t cuts  = wCuts > hCuts ? wCuts : hCuts;
+//			if (wCuts < 1 || hCuts < 1)
+//			{
+//				mDirtyRegion->AddRect(rect);
+//			}
+//			else
+//			{
+//				cuts = cuts > 3 ? 3 : cuts;
+//				Rect cutRect = rect;
+//				cutRect.w = rect.w / (cuts);
+//				cutRect.h = rect.h / (cuts);
+//				int16_t xInc = cutRect.w;
+//				int16_t yInc = cutRect.h;
+//				if (clipped < 90 || (clipped > 180 && clipped < 270))
+//				{
+//					cutRect.y = (rect.y + rect.h) - cutRect.h;
+//					yInc = -cutRect.h;
+//				}
+//				cutRect.w += cutRect.w/2;
+//				cutRect.h += cutRect.h/2;
+//				for (int16_t cut=0; cut<cuts; cut++)
+//				{
+//					mDirtyRegion->AddRect(cutRect);
+//					cutRect.x += xInc;
+//					cutRect.y += yInc;
+//				}
+//			}
+//		}
+//		else
+			mDirtyRegion->AddRect(rect);
 	}
 
 	if (fill)
@@ -611,24 +732,36 @@ GraphicsContextBase::DrawTrapezoid(Color32 color, Point origin, int32_t angleWid
 		}
 #endif
 	}
+
 	delete [] p0Array;
 	delete [] p1Array;
 	delete [] p2Array;
 	delete [] p3Array;
+
+	PROFILE_STOP(mProfileData.mDrawTrapezoid)
+
 }
 
 void
 GraphicsContextBase::FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor)
 {
-	std::list<Point> nodes;
+	PROFILE_START(mProfileData.mFloodFill)
+
+		std::list<Point> nodes;
 	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
 	uint32_t* ptr = (uint32_t*)GetSelectedSurface()->mCurrBufferPtr + x + (y * props.mStride / 4);
 
 	if ((x < props.mGeometry.x) || (x >= (props.mGeometry.x + props.mGeometry.w)) || 
 		(y < props.mGeometry.y) || (y >= (props.mGeometry.y + props.mGeometry.h)))
+	{
+		PROFILE_STOP(mProfileData.mFloodFill)
 		return;
+	}
 	if (*ptr == borderColor)
+	{
+		PROFILE_STOP(mProfileData.mFloodFill)
 		return;
+	}
 
 	Point point;
 	Point pointAdd;
@@ -678,11 +811,14 @@ GraphicsContextBase::FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint3
 			}
 		}
 	}
+	PROFILE_STOP(mProfileData.mFloodFill)
 }
 
 void
 GraphicsContextBase::FloodFillLeft(uint32_t intColor, Point* start, int16_t arraySize)
 {
+	PROFILE_START(mProfileData.mFloodFill)
+
 	Point*  curr = start;
 	int16_t left = arraySize;
 	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
@@ -699,11 +835,20 @@ GraphicsContextBase::FloodFillLeft(uint32_t intColor, Point* start, int16_t arra
 		}
 		curr++;
 	}
+
+#ifdef WIN32
+	if ((rand() % 1000) < 100)
+		Sleep(1);
+#endif
+
+	PROFILE_STOP(mProfileData.mFloodFill)
 }
 
 void
 GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arraySize)
 {
+	PROFILE_START(mProfileData.mFloodFill)
+	
 	Point*  curr = start;
 	int16_t left = arraySize;
 	const FramebufferProperties& props = GetSelectedSurface()->GetFramebufferProperties();
@@ -720,6 +865,13 @@ GraphicsContextBase::FloodFillRight(uint32_t intColor, Point* start, int16_t arr
 		}
 		curr++;
 	}
+
+#ifdef WIN32
+	if ((rand() % 1000) < 100)
+		Sleep(1);
+#endif
+	
+	PROFILE_STOP(mProfileData.mFloodFill)
 }
 
 void
@@ -739,10 +891,48 @@ GraphicsContextBase::DrawArc(Color32 color, Point origin, int16_t startWideAngle
 }
 
 void
-GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& colorIn)
+GraphicsContextBase::DrawCircle(Color32 color, Point origin, int16_t radius, bool fill)
 {
+	int16_t x0, y0, x1, y1;
+	int32_t angleInc = 32;
+	for (int32_t angle = 0; angle < 1440; angle += angleInc)
+	{
+		int32_t clipped	= Trig::ClipWideDegree(angle);
+		x0 = origin.x + (int16_t)((Trig::mCosWideInt[clipped] * radius) >> Trig::kTrigShift);
+		y0 = origin.y + (int16_t)((Trig::mSinWideInt[clipped] * radius) >> Trig::kTrigShift);
+		clipped	= Trig::ClipWideDegree(angle + angleInc);
+		x1 = origin.x + (int16_t)((Trig::mCosWideInt[clipped] * radius) >> Trig::kTrigShift);
+		y1 = origin.y + (int16_t)((Trig::mSinWideInt[clipped] * radius) >> Trig::kTrigShift);
+		DrawLine(color, x0, y0, x1, y1);
+	}
+	if (fill)
+	{
+		uint32_t uColor = *((uint32_t*)&color);
+		FloodFill(origin.x, origin.y, uColor, uColor);
+	}
+}
+
+int16_t	
+GraphicsContextBase::GetTextDrawnLength(FontDatabaseFile* font, std::string& text)
+{
+	int16_t length = 0;
+	for (size_t i = 0; i < (uint16_t)text.length(); i++)
+	{
+		uint8_t offset = text[i] - font->startChar;
+		length += (int16_t)font->widthArray[offset];
+	}
+	return length;
+}
+
+void
+GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& colorIn, bool alphaBlend)
+{
+	//UartPrintf("font=%p, fileSize=%d, cols=%d, width=%p, height=%p\n", font, font->fileSize, font->columns, font->cellWidth, font->cellHeight);
+
 	if (!font)
 		return;
+
+	PROFILE_START(mProfileData.mDrawText)
 
 	Color32 color = colorIn;
 	uint32_t fontStride = font->cellWidth * font->columns;
@@ -756,6 +946,7 @@ GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& 
 		currChar += (offset % font->columns) * font->cellWidth;				// adjust for the column
 		currChar += (offset/font->columns) * font->cellHeight * fontStride;	// adjust for the row
 
+		//UartPrintf("offset=%d, currChar=%p\n", offset, currChar);
 		for (int16_t y = 0; y < (uint16_t)font->cellHeight; y++)
 		{
 			uint8_t* src = currChar + y * fontStride;
@@ -765,7 +956,10 @@ GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& 
 				if (*src)
 				{
 					color.a = *src;
-					*dst = color.AlphaBlend(*dst);
+					if (alphaBlend)
+						*dst = color.AlphaBlend(*dst);
+					else
+						*dst = color;
 				}
 				src++;
 				dst++;
@@ -775,9 +969,33 @@ GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& 
 				Sleep(1);
 	#endif
 		}
-		dstX += font->cellWidth;
+		dstX += font->widthArray[offset];
+	}
+
+	PROFILE_STOP(mProfileData.mDrawText)
+}
+
+void 
+GraphicsContextBase::DrawEmboss(Color32 colorMax, Point origin, int16_t innerRadius, int16_t outerRadius, 
+					  int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide, int32_t stepAngleWide)
+{
+	Color32 color;
+	color.a = eOpaque;
+	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide += stepAngleWide)
+	{
+		int32_t offset = Trig::ClipWideDegree(angleWide - peakAngleWide);
+		int32_t shift  = offset < 720 ? (720 - offset) : (offset - 720);
+		color.r = (uint8_t)(colorMax.r * shift / 720);
+		color.g = (uint8_t)(colorMax.g * shift / 720);
+		color.b = (uint8_t)(colorMax.b * shift / 720);
+
+		DrawTrapezoid(color, origin, angleWide + stepAngleWide/2, innerRadius, outerRadius, 
+			stepAngleWide, stepAngleWide, true,
+			eAntiAliasS1S3	// Only anti-alias side 1 and 3 (top/bottom). If we do it on the sides, we will see a boundary
+		);
 	}
 }
+
 
 #ifdef WIN32
 bool
@@ -905,14 +1123,17 @@ GraphicsContextWin::CreateFontDatabase(std::string fontName, int16_t height)
 		if (!res)
 			break;
 
-		FillRectangle(mFBProperties.mGeometry, black);
-
+		TEXTMETRIC metric;
 		HFONT font = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 			                    CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FF_DONTCARE | DEFAULT_PITCH, L"Eras Demi ITC");
 		
 		SelectObject(mDC, font);
 		SetTextColor(mDC, RGB(255,255,255));
 		SetBkMode(mDC,TRANSPARENT);
+
+		BOOL winRes = GetTextMetrics(mDC, &metric);
+
+		FillRectangle(mFBProperties.mGeometry, black);
 
 		Rect maxSize(0,0,0,0);
 		RECT winRect;
@@ -921,12 +1142,17 @@ GraphicsContextWin::CreateFontDatabase(std::string fontName, int16_t height)
 		// Go through the ASCII table, and render each character
 		char startChar = ' ';
 		char endChar = '~';
+		uint8_t widths[256];
+
 		for (char character = startChar; character <= endChar; character++)
 		{
 			DrawTextA(mDC, &character, 1, &winRect, DT_LEFT | DT_BOTTOM);
 
 			SIZE size;
 			GetTextExtentPointA(mDC, &character, 1, &size);
+
+			// Track each character's width
+			widths[character - startChar] = size.cx;
 
 			if ((character % 32) == 31)
 			{
@@ -968,15 +1194,18 @@ GraphicsContextWin::CreateFontDatabase(std::string fontName, int16_t height)
 		size_t dbSize = sizeof(FontDatabaseFile) + maxSize.w * maxSize.h;
 		FontDatabaseFile* db = (FontDatabaseFile*)malloc(dbSize);
 		memset(db, 0, sizeof(FontDatabaseFile));
-		db->fileSize	= ntohl(dbSize);
+		db->fileSize	= dbSize;
 		memcpy(&db->fontName, fontName.c_str(), fontName.length());
-		db->fontHeight	= (uint8_t)height;
+		db->fontHeight	= (uint8_t)metric.tmHeight;
+		db->fontAscent	= (uint8_t)metric.tmAscent;
+		db->fontDescent	= (uint8_t)metric.tmDescent;
 		db->startChar	= (uint8_t)startChar;
 		db->endChar		= (uint8_t)endChar;
 		db->columns		= (uint8_t)columns;
 		db->rows		= (uint8_t)rows;
 		db->cellWidth	= (uint8_t)colWidth;
 		db->cellHeight	= (uint8_t)rowHeight;
+		memcpy(&db->widthArray, widths, (endChar - startChar) * sizeof(char));
 
 		// Write out the alpha values
 		uint8_t* dst = &db->alphaArray;
@@ -1041,6 +1270,19 @@ GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 			mFBProperties.mStride = fbDesc.pitch;
 			mFrontBufferPtr = (Color32*)fbDesc.buffer;
 			mCurrBufferPtr  = mFrontBufferPtr;
+			if (properties.mDoubleBuffer)
+			{
+				// Double-buffer was requested, so allocate the back buffer now
+				if (!AllocateFramebuffer(properties))
+				{
+					UartPrintf("Allocate primary rear framebuffer failed\n");
+					res = false;
+					break;
+				}
+				// AllocateFramebuffer will set the latest buffer to mFrontBuffer, so undo that operation
+				mBackBufferPtr = mFrontBufferPtr;
+				mFrontBufferPtr = (Color32*)fbDesc.buffer;
+			}
 		}
 		UartPrintf("Allocate primary framebuffer : front = %x\n", mFrontBufferPtr);
 	} while (false);
@@ -1082,8 +1324,20 @@ GraphicsContextPi::FreeFramebuffer()
 void
 GraphicsContextPi::FillRectangle(Rect rect, Color32 argb)
 {
-	UartPrintf("FillRectangle: rect=%d,%d : %d,%d. stride=%d\n", rect.x, rect.y, rect.w, rect.h, mFBProperties.mStride);
+//	UartPrintf("FillRectangle: rect=%d,%d : %d,%d. stride=%d\n", rect.x, rect.y, rect.w, rect.h, mFBProperties.mStride);
 	GraphicsContextBase::FillRectangle(rect, argb);
+}
+
+void
+GraphicsContextPi::CopyBackToFront(Rect& rect)
+{
+	PROFILE_START(mProfileData.mCopyBackToFront)
+
+	Color32* src = mBackBufferPtr;
+	Color32* dst = mFrontBufferPtr;
+	dmaBitBlt(dst, rect, mFBProperties.mStride, src, rect, mFBProperties.mStride);
+
+	PROFILE_STOP(mProfileData.mCopyBackToFront)
 }
 
 bool __attribute__((optimize("O0")))

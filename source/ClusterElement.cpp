@@ -90,11 +90,11 @@ ClusterElement::SetLocation(const Point& loc)
 	// Invalidate the foreground for the new location
 	mForegroundDirtyRegion.Clear();
 	mForegroundDirtyRegion.AddRect(mClientRect);
-	UartPrintf("mClientRect = %d,%d - %d,%d\n",
-			mClientRect.x,
-			mClientRect.y,
-			mClientRect.w,
-			mClientRect.h);
+//	UartPrintf("mClientRect = %d,%d - %d,%d\n",
+//			mClientRect.x,
+//			mClientRect.y,
+//			mClientRect.w,
+//			mClientRect.h);
 }
 
 void 
@@ -104,7 +104,8 @@ ClusterElement::Invalidate(const Rect& box)
 	Region boxRegion(mGfx.ScreenToClient(box));
 
 	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, boxRegion, Region::eOr);
-//	UartPrintf("Invalidate(Rect) : box = %d,%d - %d,%d, dirty = %d,%d - %d,%d\n",
+
+//		UartPrintf("Invalidate(Rect) : box = %d,%d - %d,%d, dirty = %d,%d - %d,%d. this=%p\n",
 //			mClientRect.x,
 //			mClientRect.y,
 //			mClientRect.w,
@@ -112,9 +113,9 @@ ClusterElement::Invalidate(const Rect& box)
 //			mForegroundDirtyRegion.GetDirtyRect().x,
 //			mForegroundDirtyRegion.GetDirtyRect().y,
 //			mForegroundDirtyRegion.GetDirtyRect().w,
-//			mForegroundDirtyRegion.GetDirtyRect().h
+//			mForegroundDirtyRegion.GetDirtyRect().h,
+//			this
 //			);
-
 }
 
 void 
@@ -128,11 +129,16 @@ ClusterElement::Invalidate(const Region& inRegion)
 		Region boxRegion(mGfx.ScreenToClient(rects[i]));
 		mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, (Region&)boxRegion, Region::eOr);
 	}
-//	UartPrintf("Invalidate(Region) : dirty = %d,%d - %d,%d\n",
+//	UartPrintf("Invalidate(Region) : inRegion = %d,%d - %d,%d, dirty = %d,%d - %d,%d. this=%p\n",
+//			region.GetDirtyRect().x,
+//			region.GetDirtyRect().y,
+//			region.GetDirtyRect().w,
+//			region.GetDirtyRect().h,
 //			mForegroundDirtyRegion.GetDirtyRect().x,
 //			mForegroundDirtyRegion.GetDirtyRect().y,
 //			mForegroundDirtyRegion.GetDirtyRect().w,
-//			mForegroundDirtyRegion.GetDirtyRect().h
+//			mForegroundDirtyRegion.GetDirtyRect().h,
+//			this
 //			);
 }
 
@@ -149,6 +155,14 @@ ClusterElement::Update()
 Region 
 ClusterElement::Draw()
 {
+//	UartPrintf("ClusterElement::Draw() : mForegroundDirtyRegion = %d,%d - %d,%d. this=%p\n",
+//			mForegroundDirtyRegion.GetDirtyRect().x,
+//			mForegroundDirtyRegion.GetDirtyRect().y,
+//			mForegroundDirtyRegion.GetDirtyRect().w,
+//			mForegroundDirtyRegion.GetDirtyRect().h,
+//			this
+//			);
+
 	Region ret = mForegroundDirtyRegion;
 	if (mStateChanged)
 	{
@@ -156,6 +170,7 @@ ClusterElement::Draw()
 		mGfx.GradientRectangle(mClientRect, mGradientAngle, mGradientStops);
 		mStateChanged = false;
 	}
+
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
 		// Copy the affected region to the primary surface

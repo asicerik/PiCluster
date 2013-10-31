@@ -55,7 +55,9 @@ Region::SubtractRect(const Rect& rect)
 Region 
 Region::CombineRegion(Region& a, Region& b, RegionOperation op)
 {
-	Region c;
+	PROFILE_START(GraphicsContextBase::mProfileData.mRegion)
+
+	Region c ALIGN;
 	switch (op)
 	{
 		case eOr:
@@ -98,13 +100,18 @@ Region::CombineRegion(Region& a, Region& b, RegionOperation op)
 		}
 		break;
 	}
+	
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mRegion)
+
 	return c;
 }
 
 Rect
 Region::IntersectRects(const Rect& a, const Rect& b)
 {
-	Rect c;
+	PROFILE_START(GraphicsContextBase::mProfileData.mRegion)
+
+	Rect c ALIGN;
 	int16_t right, bottom;
 
 	// Find the left edge
@@ -150,13 +157,17 @@ Region::IntersectRects(const Rect& a, const Rect& b)
 	c.w = right - c.x;
 	c.h = bottom - c.y;
 
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mRegion)
+
 	return c;
 }
 
 Rect 
 Region::GetDirtyRect()
 {
-	Rect ret(0, 0, 0, 0);
+	PROFILE_START(GraphicsContextBase::mProfileData.mRegion)
+
+	Rect ret  ALIGN (0, 0, 0, 0);
 	if (!mDirtyRects.empty())
 	{
 		Point topLeft( INT16_MAX, INT16_MAX );
@@ -178,12 +189,16 @@ Region::GetDirtyRect()
 		ret.w = botRight.x - topLeft.x;
 		ret.h = botRight.y - topLeft.y;
 	}
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mRegion)
+
 	return ret;
 }
 
 void 
 Region::CoalesceRects()
 {
+	PROFILE_START(GraphicsContextBase::mProfileData.mRegion)
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mRegion)
 	return;
 
 	while (mDirtyRects.size() > mMaxRects)
@@ -201,11 +216,15 @@ Region::OffsetRegion(Point offset)
 void 
 Region::OffsetRegion(int16_t x, int16_t y)
 {
+	PROFILE_START(GraphicsContextBase::mProfileData.mRegion)
+
 	std::vector<Rect>::iterator iter = mDirtyRects.begin();
 	for (; iter != mDirtyRects.end(); iter++)
 	{
 		iter->x += x;
 		iter->y += y;
 	}
+
+	PROFILE_STOP(GraphicsContextBase::mProfileData.mRegion)
 }
 

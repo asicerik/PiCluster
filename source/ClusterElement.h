@@ -28,6 +28,9 @@ public:
 	void AddGradientStop(float position, uint8_t a, uint8_t r, uint8_t g, uint8_t b);
 	void SetGradientAngle(int16_t angle);
 	GraphicsContext& GetGraphicsContext()	{ return mGfx; };
+
+	Rect GetClientRect()					{ return mClientRect; };
+
 protected:
 	bool				mVisible;
 
@@ -38,6 +41,7 @@ protected:
 	Region				mBackgroundDirtyRegion;		//!< The portion of our background that needs to be redrawn
 	Region				mScreenDirtyRegion;			//!< The portion of the object below us that needs to be redrawn
 													//!< NOTE : this is in screen coordinates, not client
+	Region				mTempRegion;				//!< Temp storage region. Never assume this contains anything valid!
 	std::vector<GradientStop>
 						mGradientStops;
 	bool				mStateChanged;

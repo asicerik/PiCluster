@@ -283,8 +283,6 @@
 /// \version 1.29 Further fix to SPI from Peter Würtz.
 /// \author  Mike McCauley (mikem@airspayce.com) DO NOT CONTACT THE AUTHOR DIRECTLY: USE THE LISTS
 
-
-
 // Defines for BCM2835
 #ifndef BCM2835_H
 #define BCM2835_H
@@ -308,7 +306,11 @@
 /// Base Physical Address of the BCM 2835 peripheral registers
 #define BCM2835_PERI_BASE               0x20000000
 /// Base Physical Address of the System Timer registers
-#define BCM2835_ST_BASE			(BCM2835_PERI_BASE + 0x3000)
+#define BCM2835_ST_BASE					(BCM2835_PERI_BASE + 0x3000)
+/// Base Physical Address of the DMA registers
+#define BCM2835_DMA_BASE				(BCM2835_PERI_BASE + 0x7000)
+/// Base Physical Address of the DMA registers for channel 15
+#define BCM2835_DMA15_BASE				(BCM2835_PERI_BASE + 0xE05000)
 /// Base Physical Address of the Pads registers
 #define BCM2835_GPIO_PADS               (BCM2835_PERI_BASE + 0x100000)
 /// Base Physical Address of the Clock/timer registers
@@ -318,11 +320,13 @@
 /// Base Physical Address of the SPI0 registers
 #define BCM2835_SPI0_BASE               (BCM2835_PERI_BASE + 0x204000)
 /// Base Physical Address of the BSC0 registers
-#define BCM2835_BSC0_BASE 		(BCM2835_PERI_BASE + 0x205000)
+#define BCM2835_BSC0_BASE 				(BCM2835_PERI_BASE + 0x205000)
 /// Base Physical Address of the PWM registers
 #define BCM2835_GPIO_PWM                (BCM2835_PERI_BASE + 0x20C000)
  /// Base Physical Address of the BSC1 registers
-#define BCM2835_BSC1_BASE		(BCM2835_PERI_BASE + 0x804000)
+#define BCM2835_BSC1_BASE				(BCM2835_PERI_BASE + 0x804000)
+/// Base Physical Address of the SD Card/Mass storage controller
+#define BCM2835_EEMC_BASE               (BCM2835_PERI_BASE + 0x300000)
 
 
 /// Base of the ST (System Timer) registers.
@@ -356,6 +360,10 @@ extern volatile uint32_t *bcm2835_bsc0;
 /// Base of the BSC1 registers.
 /// Available after bcm2835_init has been called
 extern volatile uint32_t *bcm2835_bsc1;
+
+/// Base of the EEMC (mass storage) registers.
+/// Available after bcm2835_init has been called
+extern volatile uint32_t *bcm2835_eemc;
 
 /// Size of memory page on RPi
 #define BCM2835_PAGE_SIZE               (4*1024)
@@ -728,6 +736,56 @@ typedef enum
     BCM2835_PWM_CLOCK_DIVIDER_2     = 2,       ///< 2 = 9.6MHz, fastest you can get
     BCM2835_PWM_CLOCK_DIVIDER_1     = 1,       ///< 1 = 4.6875kHz, same as divider 4096
 } bcm2835PWMClockDivider;
+
+// Defines for DMA
+//      BCM2835 data sheet, Page 38 onwards.
+// Note, there are 16 DMA channels, so one must include the dma channel to get a physical address
+// Also note that dma channel 15 has a completely different base address
+#define BCM2835_DMA_CS					0x00		///< Control and status
+#define BCM2835_DMA_CONBLK_AD			0x04		///< Control block address
+#define BCM2835_DMA_TI					0x08		///< Transfer information
+#define BCM2835_DMA_SOURCE_AD			0x0C		///< Source address
+#define BCM2835_DMA_DEST_AD				0x10		///< Destination address
+#define BCM2835_DMA_TXFR_LEN			0x14		///< Transfer length
+#define BCM2835_DMA_STRIDE				0x18		///< 2D stride
+#define BCM2835_DMA_NEXTCONBK			0x1C		///< Next Control block address
+#define BCM2835_DMA_DEBUG				0x20		///< Debug
+
+// NOTE : these are not 'per' dma channel. Thus, do not apply the channel offsets into memory
+#define BCM2835_DMA_INT_STATUS			0xfe0		///< Interrupt status
+#define BCM2835_DMA_ENABLE				0xff0		///< Global enable
+
+#define	BCM2835_DMA_REGISTER_SPAN		0x100		///< Each dma channel is separated by this except for channel 15
+
+// Defines for EEMC
+//      BCM2835 data sheet, Page 66 onwards.
+/// EEMC register offsets from BCM2835_EEMC_BASE. Offsets into the EEMC Peripheral block in bytes per 5 Register View
+#define BCM2835_EEMC_ARG2				(BCM2835_EEMC_BASE+0x0000) ///< EEMC ACMD23 argument
+#define BCM2835_EEMC_BLKSIZECNT			(BCM2835_EEMC_BASE+0x0004) ///< EEMC block size and count
+#define BCM2835_EEMC_ARG1				(BCM2835_EEMC_BASE+0x0008) ///< EEMC argument
+#define BCM2835_EEMC_CMDTM				(BCM2835_EEMC_BASE+0x000C) ///< EEMC command and transfer mode
+#define BCM2835_EEMC_RESP0				(BCM2835_EEMC_BASE+0x0010) ///< EEMC response bits 31:0
+#define BCM2835_EEMC_RESP1				(BCM2835_EEMC_BASE+0x0014) ///< EEMC response bits 63:32
+#define BCM2835_EEMC_RESP2				(BCM2835_EEMC_BASE+0x0018) ///< EEMC response bits 95:64
+#define BCM2835_EEMC_RESP3				(BCM2835_EEMC_BASE+0x001C) ///< EEMC response bits 127:96
+#define BCM2835_EEMC_DATA				(BCM2835_EEMC_BASE+0x0020) ///< EEMC data
+#define BCM2835_EEMC_STATUS				(BCM2835_EEMC_BASE+0x0024) ///< EEMC status
+#define BCM2835_EEMC_CONTROL0			(BCM2835_EEMC_BASE+0x0028) ///< EEMC host configuration bits
+#define BCM2835_EEMC_CONTROL1			(BCM2835_EEMC_BASE+0x002C) ///< EEMC host configuration bits
+#define BCM2835_EEMC_INTERRUPT			(BCM2835_EEMC_BASE+0x0030) ///< EEMC interrupt flags
+#define BCM2835_EEMC_IRPT_MASK			(BCM2835_EEMC_BASE+0x0034) ///< EEMC interrupt mask bits
+#define BCM2835_EEMC_IRPT_EN			(BCM2835_EEMC_BASE+0x0038) ///< EEMC interrupt enable bits
+#define BCM2835_EEMC_CONTROL2			(BCM2835_EEMC_BASE+0x003C) ///< EEMC host configuration bits
+#define BCM2835_EEMC_FORCE_IRPT			(BCM2835_EEMC_BASE+0x0050) ///< EEMC interrupt force
+#define BCM2835_EEMC_BOOT_TIMEOUT		(BCM2835_EEMC_BASE+0x0070) ///< EEMC timeout in boot mode
+#define BCM2835_EEMC_DGB_SEL			(BCM2835_EEMC_BASE+0x0074) ///< EEMC debug bus config
+#define BCM2835_EEMC_EXRDFIFO_CFG		(BCM2835_EEMC_BASE+0x0080) ///< EEMC extension FIFO config
+#define BCM2835_EEMC_EXRDFIFO_EN		(BCM2835_EEMC_BASE+0x0084) ///< EEMC extension FIFO enable
+#define BCM2835_EEMC_TUNE_STEP			(BCM2835_EEMC_BASE+0x0088) ///< EEMC delay per card clock tuning step
+#define BCM2835_EEMC_TUNE_STEPS_STD		(BCM2835_EEMC_BASE+0x008C) ///< EEMC card clock tuning steps for SDR
+#define BCM2835_EEMC_TUNE_STEPS_DDR		(BCM2835_EEMC_BASE+0x0090) ///< EEMC card clock tuning steps for DDR
+#define BCM2835_EEMC_SPI_INT_SPT		(BCM2835_EEMC_BASE+0x00F0) ///< EEMC SPI interrupt support
+#define BCM2835_EEMC_SLOTISR_VER		(BCM2835_EEMC_BASE+0x00FC) ///< EEMC slot interrupt status and version
 
 // Historical name compatibility
 #ifndef BCM2835_NO_DELAY_COMPATIBILITY

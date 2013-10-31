@@ -24,8 +24,11 @@ protected:
 	ClusterElement	mTest;
 	DialGuage		mSpeedo;						//!< Speedometer
 	DialGuage		mTach;							//!< Tachometer
+	DialCap			mSpeedoCap;						//!< Speedometer cap
+	DialCap			mTachCap;						//!< Tachometer cap
 
 	// Fonts
+	int32_t					mALign	ALIGN;			//!< Make sure everything below is 32b aligned
 	std::vector<ClusterElement*>	mElements;		//!< All the elements are also stored here for easy traversal
 	Rect							mExtents;		//!< The bounding box for our instrument cluster
 };

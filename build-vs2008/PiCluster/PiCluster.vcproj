@@ -42,7 +42,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;$(SolutionDir)&quot;;../../source"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS; ENABLE_PROFILING"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -181,6 +181,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\source\dma.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\GraphicsShim.cpp"
 				>
 			</File>
@@ -221,6 +225,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\source\Timer.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\Trig.cpp"
 				>
 			</File>
@@ -240,6 +248,10 @@
 			</File>
 			<File
 				RelativePath="..\..\source\DialGuage.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\dma.h"
 				>
 			</File>
 			<File
@@ -276,6 +288,10 @@
 			</File>
 			<File
 				RelativePath="..\..\source\Tests.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\Timer.h"
 				>
 			</File>
 			<File
