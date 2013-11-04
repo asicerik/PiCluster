@@ -8,7 +8,12 @@
 #include "Trig.h"
 #include "InstrumentCluster.h"
 
-GraphicsContext			InstrumentCluster::mFontEras18;
+//GraphicsContext			InstrumentCluster::mFontEras18;
+
+extern BMPImage*		gWaterTempImage;
+extern BMPImage*		gFuelImage;
+extern BMPImage*		gLeftArrowImage;
+extern BMPImage*		gRightArrowImage;
 
 /*
 	Graphics general concepts:
@@ -37,6 +42,7 @@ GraphicsContext			InstrumentCluster::mFontEras18;
 */
 InstrumentCluster::InstrumentCluster()
 {
+	mNextFlasherChange	= GetTimeMs();
 }
 
 InstrumentCluster::~InstrumentCluster()
@@ -44,13 +50,14 @@ InstrumentCluster::~InstrumentCluster()
 }
 
 bool
-InstrumentCluster::Init(const Rect& box)
+InstrumentCluster::Init(const Rect& boxIn)
 {
 	bool res = false;
 	do
 	{
 		Trig::BuildTrigTabs();
 
+		Rect box(boxIn);
 		mExtents = box;
 
 		// The primary surface is where we draw images to the screen
@@ -68,8 +75,7 @@ InstrumentCluster::Init(const Rect& box)
 		mBackground.GetGraphicsContext().SetSurfaceSelection(eFront);
 		mElements.push_back(&mBackground);
 
-		// A test element
-		Rect box;
+		Color32 textColor(200,200,200,eOpaque);
 
 		// Speedometer
 		box.x = box.y = 0;
@@ -79,20 +85,59 @@ InstrumentCluster::Init(const Rect& box)
 		point.y = 50;
 		mSpeedo.Init(box);
 		mSpeedo.SetMinMax(0, 160, 5, 10, -120, 120);
-
 		mSpeedo.SetLocation(point);
+		mSpeedo.SetTextColor(textColor);
+		mSpeedo.SetLabelText("miles/hour");
+		mSpeedo.SetLabelCenter(Point(180, 75));
+		mSpeedo.SetFullCircle(true);
 		mElements.push_back(&mSpeedo);
 		
+		// Tachometer
 		point.x = 1280 - 200 - box.w;
 		point.y = 50;
 		mTach.Init(box);
-		mTach.SetValue(800);
+		mTach.SetValue(0);
 		mTach.SetMinMax(0, 8000, 250, 1000, -120, 120);
 		mTach.AddColorRange(Color32(200, 0, 0, eOpaque), 7000, 8000);
 		mTach.AddColorRange(Color32(0xff, 0x33, 0, eOpaque), 6500, 7000);
-
 		mTach.SetLocation(point);
+		mTach.SetTextColor(textColor);
+		mTach.SetLabelText("revs/min");
+		mTach.SetLabelCenter(Point(180, 75));
+		mTach.SetFullCircle(true);
 		mElements.push_back(&mTach);
+
+		// Water temp guage
+		point.x = 100;
+		point.y = 300;
+		box.w = box.h = 150;
+		mWaterTemp.Init(box);
+		mWaterTemp.SetMinMax('C', 'H', 0, 100, 25, 100, -150, -30);
+		mWaterTemp.SetValue(50);
+		mWaterTemp.AddColorRange(Color32(200, 200, 200, eOpaque), 0, 80);
+		mWaterTemp.AddColorRange(Color32(200, 0, 0, eOpaque), 85, 100);
+		mWaterTemp.SetLocation(point);
+		mWaterTemp.SetLabelImage(gWaterTempImage);
+//		mWaterTemp.SetLabelImageCenter(Point(35, 75));
+		mWaterTemp.SetLabelImageCenter(Point(70, 90));
+		mWaterTemp.SetFullCircle(false);
+		mElements.push_back(&mWaterTemp);
+
+		// Fuel guage
+		point.x = 1280 - 100 - box.w;
+		point.y = 300;
+		box.w = box.h = 150;
+		mFuel.Init(box);
+		mFuel.SetValue(50);
+		mFuel.SetMinMax('F', 'E', 100, 0, 25, 100, 30, 150);
+		mFuel.AddColorRange(Color32(200, 200, 200, eOpaque), 100, 0);
+		mFuel.AddColorRange(Color32(200, 0, 0, eOpaque), 10, 0);
+		mFuel.SetLocation(point);
+		mFuel.SetLabelImage(gFuelImage);
+//		mFuel.SetLabelImageCenter(Point(90, 75));
+		mFuel.SetLabelImageCenter(Point(50, 90));
+		mFuel.SetFullCircle(false);
+		mElements.push_back(&mFuel);
 
 		// Caps for dials
 		int16_t capRadius = 30;
@@ -100,19 +145,70 @@ InstrumentCluster::Init(const Rect& box)
 		box.y = 0;
 		box.w = capRadius * 2;
 		box.h = capRadius * 2;
+
+		// Speedo cap
 		point.x = 200 + 180 - capRadius;
 		point.y = 50  + 180 - capRadius;
 		mSpeedoCap.Init(box);
 		mSpeedoCap.SetLocation(point);
 		mSpeedoCap.GetGraphicsContext().SetSurfaceSelection(eFront);
-		mElements.push_back(&mSpeedoCap);
+		//mElements.push_back(&mSpeedoCap);
 
+		// Tach cap
 		point.x = 1280 - 200 - 180 - capRadius;
 		point.y = 50  + 180 - capRadius;
 		mTachCap.Init(box);
 		mTachCap.SetLocation(point);
 		mTachCap.GetGraphicsContext().SetSurfaceSelection(eFront);
-		mElements.push_back(&mTachCap);
+		//mElements.push_back(&mTachCap);
+		
+		// Water temp cap
+		capRadius = 25;
+		box.w = capRadius * 2;
+		box.h = capRadius * 2;
+		point.x = 175 - capRadius;
+		point.y = 300 + 75 - capRadius;
+		mWaterTempCap.Init(box);
+		mWaterTempCap.SetLocation(point);
+		mWaterTempCap.GetGraphicsContext().SetSurfaceSelection(eFront);
+		//mElements.push_back(&mWaterTempCap);
+
+		// Fuel cap
+		point.x = 1280 - 175 - capRadius;
+		point.y = 300 + 75 - capRadius;
+		mFuelCap.Init(box);
+		mFuelCap.SetLocation(point);
+		mFuelCap.GetGraphicsContext().SetSurfaceSelection(eFront);
+		//mElements.push_back(&mFuelCap);
+
+		// InfoCenter - top view of our car + information display
+		box.w = 192;
+		box.h = 192;
+		mInfoCenter.Init(box);
+		point.x = 544;
+		point.y = 100;
+		mInfoCenter.SetLocation(point);
+		mInfoCenter.SetMode(eInfoModeTirePressure);
+		mInfoCenter.SetTextColor(textColor);
+		mElements.push_back(&mInfoCenter);
+
+		// Left turn signal
+		box.w = 48;
+		box.h = 48;
+		mLeftArrow.Init(box);
+		point.x = 500;
+		point.y = 30;
+		mLeftArrow.SetLocation(point);
+		mLeftArrow.SetImage(gLeftArrowImage);
+		mElements.push_back(&mLeftArrow);
+
+		// Right turn signal
+		mRightArrow.Init(box);
+		point.x = 732;
+		point.y = 30;
+		mRightArrow.SetLocation(point);
+		mRightArrow.SetImage(gRightArrowImage);
+		mElements.push_back(&mRightArrow);
 
 		res = true;
 	} while (false);
@@ -130,8 +226,24 @@ InstrumentCluster::Update()
 	{
 		mTach.SetValue(rpm);
 		mSpeedo.SetValue(rpm / 100);
+		mFuel.SetValue(rpm / 100);
+		mInfoCenter.SetTirePressures(rpm / 4000, rpm / 4000 + 1, rpm / 4000 + 2, rpm / 4000 + 3);
+		if (GetTimeMs() >= mNextFlasherChange)
+		{
+			mNextFlasherChange = GetTimeMs() + 500;
+			if (mLeftArrow.GetVisible())
+			{
+				mLeftArrow.SetVisible(false);
+				mRightArrow.SetVisible(false);
+			}
+			else 
+			{
+				mLeftArrow.SetVisible(true);
+				mRightArrow.SetVisible(true);
+			}
+		}
 		rpm += 50;
-		if (rpm > 8000)
+		if (rpm >= 8000)
 		{
 			rpm = 0;
 		}
@@ -146,10 +258,12 @@ InstrumentCluster::Update()
 			// Invalidate the region exposed from the element above (if any)
 			(*iter)->Invalidate(backgroundUpdate);
 
-			// Update the element. Note - it may consume any prior background updates
+			// Update the element. 
+			// Note - someday, it may consume any prior background updates
 			// if it completely contains the invalidated region.
-			// It may also make the invalid region bigger
-			backgroundUpdate = (*iter)->Update();
+			// For now, we 'or' them all together
+			Region updateRegion =  (*iter)->Update();
+			backgroundUpdate = Region::CombineRegion(backgroundUpdate, updateRegion, Region::eOr);
 
 //			UartPrintf("InstrumentCluster::Update() : backgroundUpdate = %d,%d - %d,%d. iter=%p\n",
 //					backgroundUpdate.GetDirtyRect().x,

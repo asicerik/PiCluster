@@ -189,6 +189,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\source\InfoCenter.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\InstrumentCluster.cpp"
 				>
 			</File>
@@ -256,6 +260,10 @@
 			</File>
 			<File
 				RelativePath="..\..\source\GraphicsShim.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\InfoCenter.h"
 				>
 			</File>
 			<File

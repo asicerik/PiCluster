@@ -20,6 +20,11 @@ ClusterElement::ClusterElement()
 	mVisible		= true;
 	mStateChanged	= true;
 	mGradientAngle	= 0;
+	mTextColor		= Color32(255, 255, 255, eOpaque);
+	mLabelImage		= NULL;
+	mImage			= NULL;
+	mImageAlpha		= eOpaque;
+	mImageAlphaCurrent	= 0;
 }
 
 ClusterElement::~ClusterElement()
@@ -77,6 +82,7 @@ void
 ClusterElement::SetVisible(bool visible)
 {
 	mVisible = visible;
+	mStateChanged = true;
 }
 
 void 
@@ -101,7 +107,10 @@ void
 ClusterElement::Invalidate(const Rect& box)
 {
 	// Translate from screen to client coordinates
+	// and clip to our client rect
 	Region boxRegion(mGfx.ScreenToClient(box));
+	Region clientRegion(mClientRect);
+	boxRegion = Region::CombineRegion(boxRegion, clientRegion, Region::eAnd);
 
 	mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, boxRegion, Region::eOr);
 
@@ -122,11 +131,14 @@ void
 ClusterElement::Invalidate(const Region& inRegion)
 {
 	Region& region = (Region&)inRegion;
+	Region clientRegion(mClientRect);
+
 	std::vector<Rect>& rects = region.GetDirtyRects();
 	for (size_t i=0; i<rects.size(); i++)
 	{
 		// Translate from screen to client coordinates
 		Region boxRegion(mGfx.ScreenToClient(rects[i]));
+		boxRegion = Region::CombineRegion(boxRegion, clientRegion, Region::eAnd);
 		mForegroundDirtyRegion = Region::CombineRegion(mForegroundDirtyRegion, (Region&)boxRegion, Region::eOr);
 	}
 //	UartPrintf("Invalidate(Region) : inRegion = %d,%d - %d,%d, dirty = %d,%d - %d,%d. this=%p\n",
@@ -147,8 +159,18 @@ ClusterElement::Update()
 {
 	// Update our internal state, and flag foreground/background if
 	// any redraws are needed
+	if (mStateChanged)
+	{
+		// Invalidate the background, assuming it needs to be redrawn
+		// If this element is opaque, this is not needed
+		mScreenDirtyRegion.AddRect(mGfx.ClientToScreen(mClientRect));
 
-	// We return any area that we did not draw so the object below us will draw it
+		// Invalidate the foreground so that it will get redrawn
+		mForegroundDirtyRegion.Clear();
+		mForegroundDirtyRegion.AddRect(mClientRect);
+	}
+
+	// We return any area that the object below needs to draw
 	return mScreenDirtyRegion;
 }	
 
@@ -163,25 +185,62 @@ ClusterElement::Draw()
 //			this
 //			);
 
+	// Clear the screen dirty region
+	mScreenDirtyRegion.Clear();
+
 	Region ret = mForegroundDirtyRegion;
 	if (mStateChanged)
 	{
+		mStateChanged = false;
+
 		// Our state has changed, so redraw everything
 		mGfx.GradientRectangle(mClientRect, mGradientAngle, mGradientStops);
-		mStateChanged = false;
+		
+		if (mImage)
+		{
+			// Adjust the image alpha if needed
+			if (mVisible && mImageAlphaCurrent < mImageAlpha)
+			{
+				mImageAlphaCurrent += 64;
+				mImageAlphaCurrent = Clip(mImageAlphaCurrent, 0, (int16_t)mImageAlpha);
+				mStateChanged = true;
+			}
+			else if (!mVisible && mImageAlphaCurrent > 0)
+			{
+				mImageAlphaCurrent -= 64;
+				mImageAlphaCurrent = Clip(mImageAlphaCurrent, 0, (int16_t)mImageAlpha);	
+				mStateChanged = true;
+			}
+			mGfx.SetGlobalAlpha((uint8_t)mImageAlphaCurrent);
+
+			Point loc(0,0);
+			mGfx.DrawBMP(loc, mImage, false);
+		}
 	}
 
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
 		// Copy the affected region to the primary surface
-		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects(), false);
+		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects(), mImage ? true : false);
 	}
 	// Clear our dirty regions since it is assumed we have drawn everything we are going to draw
 	mForegroundDirtyRegion.Clear();
 	mBackgroundDirtyRegion.Clear();
-	mScreenDirtyRegion.Clear();
 	return ret;
 }	
+
+void
+ClusterElement::DrawLabel()
+{
+	mGfx.DrawText(gFontErasDemi18, mLabelText, mLabelCenter, mTextColor, false, eAlignCenter);
+}
+
+void
+ClusterElement::DrawLabelImage()
+{
+	if (mLabelImage)
+		mGfx.DrawBMP(mLabelImageCenter, mLabelImage, false);
+}
 
 void 
 ClusterElement::AddGradientStop(float position, uint8_t a, uint8_t r, uint8_t g, uint8_t b)

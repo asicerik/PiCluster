@@ -3,6 +3,7 @@
 #include "string.h"
 #include "stdint.h"
 #include "stdio.h"
+#include "stdlib.h"
 #ifdef WIN32
 #include "windows.h"
 #endif
@@ -28,6 +29,7 @@ DialGuage::DialGuage()
 	mCurrentAngleWide 	= 0;
 	mMinChar			= 0;
 	mMaxChar			= 0;
+	mFullCircle			= false;
 }
 
 DialGuage::~DialGuage()
@@ -58,7 +60,8 @@ DialGuage::Init(const Rect& box, bool isPrimary, bool doubleBuffer)
 
 		// The needle will draw straight to the primary surface so that
 		// we don't have to do an alpha blend later
-		mNeedleGfx.SetSurfaceSelection(ePrimaryBack);
+//		mNeedleGfx.SetSurfaceSelection(ePrimaryBack);
+		mNeedleGfx.SetSurfaceSelection(eFront);
 
 		// Fill the framebuffers with magenta
 		// This is needed because our fills will fail if they encounter the same
@@ -99,12 +102,12 @@ DialGuage::SetMinMax(char minLabel, char maxLabel, uint16_t min, uint16_t max, u
 
 	// Calculate the delta between the dial min and max
 	int16_t valueDelta	= max - min;
-	int16_t minorSteps	= valueDelta / minorStep;
-	int16_t majorSteps	= valueDelta / majorStep;
+	int16_t minorSteps	= abs(valueDelta) / minorStep;
+	int16_t majorSteps	= abs(valueDelta) / majorStep;
 
 	int16_t angleDelta	= maxAngle - minAngle;
-	mMinorTickWide		= 4 * angleDelta / minorSteps;
-	mMajorTickWide		= 4 * angleDelta / majorSteps;
+	mMinorTickWide		= abs(4 * angleDelta / minorSteps);
+	mMajorTickWide		= abs(4 * angleDelta / majorSteps);
 	
 	// Pre-compute the factor to convert value to drawing angle
 	mValToAngle			= 4.0f * angleDelta / valueDelta;
@@ -125,7 +128,10 @@ DialGuage::AddColorRange(Color32 color, int16_t minValue, int16_t maxValue)
 void
 DialGuage::SetValue(uint16_t val)
 {
-	mCurrentAngleWide = (val * mValToAngle) + mMinAngleWide;
+	if (mMinInt > mMaxInt)
+		mCurrentAngleWide = mMaxAngleWide + (val * mValToAngle);
+	else
+		mCurrentAngleWide = (val * mValToAngle) + mMinAngleWide;
 	mStateChanged	= true;
 
 	if (mScreenDirtyRegion.Empty())
@@ -207,26 +213,69 @@ DialGuage::DrawBackground()
 		Point origin;
 		origin.x = mClientRect.x + mClientRect.w / 2;
 		origin.y = mClientRect.y + mClientRect.h / 2;
+		int32_t	embossMin;
+		int32_t embossMax;
+		if (mFullCircle)
+		{
+			embossMin = 0;
+			embossMax = 1440;
+		}
+		else
+		{
+			embossMin = mMinAngleWide;
+			embossMax = mMaxAngleWide;
+		}
 
 		Color32 color(32, 32, 64, eOpaque);
 
 		mGfx.SetAntiAlias(true);
 
-		mGfx.DrawEmboss(color, origin, mClientRect.w / 2 - 30, mClientRect.w / 2 - 10, 0, 1440, 600);
+		mGfx.DrawEmboss(color, origin, mClientRect.w / 2 - 30, mClientRect.w / 2 - 10, embossMin, embossMax, 600);
 
 		std::vector<ColorRange>::iterator iter = mColorRanges.begin();
 		for (; iter != mColorRanges.end(); iter++)
 		{
-			int16_t minAngle = (int16_t)(iter->mMinValue * mValToAngle) + mMinAngleWide;
-			int16_t maxAngle = (int16_t)(iter->mMaxValue * mValToAngle) + mMinAngleWide;
-			mGfx.DrawEmboss(iter->mColor, origin, mClientRect.w / 2 - 20, mClientRect.w / 2 - 15, minAngle, maxAngle, 600, 4);
+			int16_t minAngle;
+			int16_t maxAngle;
+			int16_t stepAngleWide = 20;
+			int16_t innerRadius   = mClientRect.w / 2 - 20;
+			int16_t peakColorAngleWide = 600;
+			if (mClientRect.w < 200)
+			{
+				stepAngleWide = 20;
+				innerRadius   = mClientRect.w / 2 - 15;
+				peakColorAngleWide = mMaxAngleWide;
+			}
+			if (mMinInt > mMaxInt)
+			{
+				minAngle = (int16_t)(iter->mMinValue * mValToAngle) + mMaxAngleWide;
+				maxAngle = (int16_t)(iter->mMaxValue * mValToAngle) + mMaxAngleWide;
+				mGfx.DrawEmboss(iter->mColor, origin, innerRadius, mClientRect.w / 2 - 10, minAngle, maxAngle, peakColorAngleWide, stepAngleWide);
+			}
+			else
+			{
+				minAngle = (int16_t)(iter->mMinValue * mValToAngle) + mMinAngleWide;
+				maxAngle = (int16_t)(iter->mMaxValue * mValToAngle) + mMinAngleWide;
+				mGfx.DrawEmboss(iter->mColor, origin, innerRadius, mClientRect.w / 2 - 10, minAngle, maxAngle, peakColorAngleWide, stepAngleWide);
+			}
+		}
+
+		if (mFullCircle)
+		{
+			color.r = color.g = color.b = 200;
+			mGfx.DrawEmboss(color, origin, mClientRect.w / 2 - 5, mClientRect.w / 2 - 0, 0, 1440, 1320);
 		}
 
 		color.r = color.g = color.b = 200;
-		mGfx.DrawEmboss(color, origin, mClientRect.w / 2 - 5, mClientRect.w / 2 - 0, 0, 1440, 1320);
+		DrawTicks(color, origin, mClientRect.w / 2 - 25, mClientRect.w / 2 - 10, 
+			//Trig::ClipWideDegree(mMinAngleWide), 
+			//Trig::ClipWideDegree(mMaxAngleWide), 
+			mMinAngleWide, 
+			mMaxAngleWide, 
+			mMinorTickWide, mMajorTickWide);
 
-		color.r = color.g = color.b = 200;
-		DrawTicks(color, origin, mClientRect.w / 2 - 25, mClientRect.w / 2 - 15, mMinAngleWide, mMaxAngleWide, mMinorTickWide, mMajorTickWide);
+		DrawLabel();
+		DrawLabelImage();
 
 		// Once we have drawn our background, we should never need to draw it again.
 		// Only copy it from our buffer
@@ -292,8 +341,14 @@ DialGuage::DrawForeground()
 		mScreenDirtyRegion.Clear();
 
 		Point origin;
-		origin.x = mClientRect.x + mClientRect.w / 2 + mGfx.GetScreenOffset().x;
-		origin.y = mClientRect.y + mClientRect.h / 2 + mGfx.GetScreenOffset().y;
+		origin.x = mClientRect.x + mClientRect.w / 2;
+		origin.y = mClientRect.y + mClientRect.h / 2;
+		if (mNeedleGfx.GetSurfaceSelection() == ePrimaryBack)
+		{
+			// If we are drawing to the primary, we need to account for our screen location
+			origin.x += mGfx.GetScreenOffset().x;
+			origin.y += mGfx.GetScreenOffset().y;
+		}
 
 		Color32 color(0, 0, 64, eOpaque);
 		mNeedleGfx.SetAntiAlias(true);
@@ -302,7 +357,10 @@ DialGuage::DrawForeground()
 		color.r = color.g = color.b = 230;
 
 		// Draw the needle
-		mNeedleGfx.DrawTrapezoid(color, origin, mCurrentAngleWide, 30, mClientRect.w / 2 - 15, 36, 4, true, eAntiAliasS0S1S2S3);
+		if (mClientRect.w < 200)
+			mNeedleGfx.DrawTrapezoid(color, origin, mCurrentAngleWide, 10, mClientRect.w / 2 - 20, 90, 8, true, eAntiAliasS0S1S2S3);
+		else
+			mNeedleGfx.DrawTrapezoid(color, origin, mCurrentAngleWide, 30, mClientRect.w / 2 - 20, 36, 4, true, eAntiAliasS0S1S2S3);
 
 		mNeedleGfx.DisableDirtyRects();
 		//color.r = color.g = color.b = 0;
@@ -313,8 +371,12 @@ DialGuage::DrawForeground()
 		//mGfx.DrawLine(color, rect.x, rect.y + rect.h-1, rect.x + rect.w, rect.y + rect.h-1);
 		//mGfx.DrawLine(color, rect.x, rect.y, rect.x, rect.y + rect.h);
 
-		// Move the screen dirty region to screen coordinates
-		// mScreenDirtyRegion.OffsetRegion(mGfx.GetScreenOffset());
+		if (mNeedleGfx.GetSurfaceSelection() != ePrimaryBack)
+		{
+			// Move the screen dirty region to screen coordinates
+			// only if we are not drawing directly to the primary already
+			mScreenDirtyRegion.OffsetRegion(mGfx.GetScreenOffset());
+		}
 	}
 	if (!mScreenDirtyRegion.Empty())
 	{
@@ -323,23 +385,30 @@ DialGuage::DrawForeground()
 		// Move the screen dirty region to client coordinates
 		mScreenDirtyRegion.OffsetRegion(-mGfx.GetScreenOffset().x, -mGfx.GetScreenOffset().y);
 
-		// Copy the affected region to the primary surface
-		//mNeedleGfx.CopyToPrimary(mScreenDirtyRegion.GetDirtyRects(), false);
+		if (mNeedleGfx.GetSurfaceSelection() != ePrimaryBack)
+		{
+			// Copy the affected region to the primary surface
+			mNeedleGfx.CopyToPrimary(mScreenDirtyRegion.GetDirtyRects(), true);
+		}
 
-//		color.r = color.g = color.b = 0;
-//		color.r = 255;
-//		color.a = 0;
-//		std::vector<Rect>::iterator iter = mForegroundDirtyRegion.GetDirtyRects().begin();
-//		for (; iter != mForegroundDirtyRegion.GetDirtyRects().end(); iter++)
-//		{
-//			Rect& rect = *iter;
-////			mNeedleGfx.DrawLine(color, rect.x, rect.y, rect.x + rect.w, rect.y);
-////			mNeedleGfx.DrawLine(color, rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + rect.h);
-////			mNeedleGfx.DrawLine(color, rect.x, rect.y + rect.h-1, rect.x + rect.w, rect.y + rect.h-1);
-////			mNeedleGfx.DrawLine(color, rect.x, rect.y, rect.x, rect.y + rect.h);
-////			mNeedleGfx.FillRectangle(rect, color);
-//		}
-//		mNeedleGfx.FillRectangle(mForegroundDirtyRegion.GetDirtyRect(), color);
+		color.r = color.g = color.b = 0;
+		color.r = 255;
+		color.a = 0;
+		std::vector<Rect>::iterator iter = mForegroundDirtyRegion.GetDirtyRects().begin();
+		for (; iter != mForegroundDirtyRegion.GetDirtyRects().end(); iter++)
+		{
+			Rect& rect = *iter;
+			//mNeedleGfx.DrawLine(color, rect.x, rect.y, rect.x + rect.w, rect.y);
+			//mNeedleGfx.DrawLine(color, rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + rect.h);
+			//mNeedleGfx.DrawLine(color, rect.x, rect.y + rect.h-1, rect.x + rect.w, rect.y + rect.h-1);
+			//mNeedleGfx.DrawLine(color, rect.x, rect.y, rect.x, rect.y + rect.h);
+			//mNeedleGfx.FillRectangle(rect, color);
+		}
+		if (mNeedleGfx.GetSurfaceSelection() != ePrimaryBack)
+		{
+	//		mNeedleGfx.FillRectangle(mClientRect, color);
+			mNeedleGfx.FillRectangle(mScreenDirtyRegion.GetDirtyRect(), color);
+		}
 
 		// Move the screen dirty region back to screen coordinates
 		mScreenDirtyRegion.OffsetRegion(mGfx.GetScreenOffset());
@@ -352,20 +421,35 @@ DialGuage::DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t o
 {
 	char textChar[256];
 	int16_t textRadius = innerRadius - 25;
-	int16_t majorTicks = (int16_t)(majorTickWide ? ((endAngleWide - startAngleWide) / majorTickWide) : 0);
+	int16_t majorTicks = abs((int16_t)(majorTickWide ? ((endAngleWide - startAngleWide) / majorTickWide) : 0));
 	int16_t labelDelta = (mMaxInt - mMinInt) / majorTicks;
 	int16_t currLabelVal = mMinInt;
-	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide ++)
+	int16_t tickArc = 8;
+	int32_t angleInc = startAngleWide < endAngleWide ? 1 : -1;
+	if (outerRadius < 100)
+		tickArc = 18;
+	for (int32_t angleWide = startAngleWide; (angleInc == 1 ? (angleWide <= endAngleWide) : (angleWide >= endAngleWide)); angleWide+=angleInc)
 	{
 		if (((angleWide - startAngleWide) % majorTickWide) == 0)
 		{
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius, outerRadius, 
-				4, 4,
-//				18, 18,
+				tickArc, tickArc,
 				true,
 				eAntiAliasS0S1S2S3	// Anti-alias all four sides
 			);
-			sprintf(textChar, "%d", currLabelVal);
+			if (mMinChar != 0 && mMaxChar != 0)
+			{
+				textRadius = innerRadius - 15;
+				if (currLabelVal == mMinInt)
+					textChar[0] = mMinChar;
+				else
+					textChar[0] = mMaxChar;
+				textChar[1] = 0;
+			}
+			else
+			{
+				sprintf(textChar, "%d", currLabelVal);
+			}
 			currLabelVal += labelDelta;
 			std::string text(textChar);
 			int16_t length = mGfx.GetTextDrawnLength(gFontErasDemi18, text);
@@ -373,12 +457,13 @@ DialGuage::DrawTicks(Color32 color, Point origin, int16_t innerRadius, int16_t o
 			int32_t clipped = Trig::ClipWideDegree(angleWide);
 			point.x = (int16_t)(origin.x - (length / 2) + ((textRadius * Trig::mSinWideInt[clipped]) >> Trig::kTrigShift));
 			point.y = (int16_t)(origin.y - (length / 2) + ((textRadius * -Trig::mCosWideInt[clipped]) >> Trig::kTrigShift));
-			mGfx.DrawText(gFontErasDemi18, text, point, color, false);
+			if (outerRadius < 100)
+				point.y -= (gFontErasDemi18->fontAscent + gFontErasDemi18->fontDescent) / 2;
+			mGfx.DrawText(gFontErasDemi18, text, point, color, false, eAlignLeft);
 		}
 		else if (((angleWide - startAngleWide) % minorTickWide) == 0)
 			mGfx.DrawTrapezoid(color, origin, angleWide, innerRadius + (outerRadius-innerRadius)/2, outerRadius, 
-				2, 2,
-//				14, 14,
+				tickArc / 2, tickArc / 2,
 				true,
 				eAntiAliasS0S1S2S3	// Anti-alias all four sides
 			);
@@ -392,6 +477,7 @@ DialCap::Draw()
 	if (mStateChanged)
 	{
 		mStateChanged = false;
+
 		mGfx.SetAntiAlias(true);
 
 		Point origin;
@@ -399,11 +485,19 @@ DialCap::Draw()
 		origin.y = mClientRect.y + mClientRect.h / 2;
 		Color32 color;
 
-		color.r = color.g = color.b = 0;
-		mGfx.DrawCircle(color, origin, 25, true);
-
-		color.r = color.g = color.b = 200;
-		mGfx.DrawEmboss(color, origin, 25, 30, 0, 1440, 1320);
+		color.r = color.g = color.b = 32;
+		if (mClientRect.w < 60)
+		{
+			mGfx.DrawCircle(color, origin, 16, true);
+			color.r = color.g = color.b = 100;
+			mGfx.DrawEmboss(color, origin, 16, 20, 0, 1440, 1320, 60);
+		}
+		else
+		{
+			mGfx.DrawCircle(color, origin, 25, true);
+			color.r = color.g = color.b = 100;
+			mGfx.DrawEmboss(color, origin, 25, 30, 0, 1440, 1320, 20);
+		}
 		Rect rect;
 		rect.x = origin.x - 30;
 		rect.y = origin.y - 30;
@@ -416,7 +510,8 @@ DialCap::Draw()
 
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
-		mTempRegion = Region::CombineRegion(mForegroundDirtyRegion, Region(mClientRect), Region::eAnd);
+		Region clientRegion(mClientRect);
+		mTempRegion = Region::CombineRegion(mForegroundDirtyRegion, clientRegion, Region::eAnd);
 
 		// Copy the affected region to the primary surface
 		mGfx.CopyToPrimary(mTempRegion.GetDirtyRects(), true);

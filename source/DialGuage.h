@@ -30,6 +30,7 @@ public:
 	void SetMinMax(uint16_t min, uint16_t max, uint16_t minorTick, uint16_t majorTick, int16_t minAngle, int16_t maxAngle);
 	void SetMinMax(char minLabel, char maxLabel, uint16_t min, uint16_t max, uint16_t minorStep, uint16_t majorStep, int16_t minAngle, int16_t maxAngle);
 	void AddColorRange(Color32 color, int16_t minValue, int16_t maxValue);
+	void SetFullCircle(bool enable)	{ mFullCircle = enable; };
 protected:
 	void DrawBackground();
 	void DrawForeground();
@@ -53,6 +54,8 @@ protected:
 
 	char		mMinChar;		//!< Minimum value in char mode (0 means integer mode)
 	char		mMaxChar;		//!< Maximum value in char mode (0 means integer mode)
+
+	bool		mFullCircle;	//!< If true, draw a full circle for the guage
 };
 
 class ALIGN DialCap : public ClusterElement

@@ -120,6 +120,30 @@ struct Color32
 		//ret.a = 255;
 		return ret;
 	}
+	inline Color32	 AlphaBlend(Color32 background, uint8_t globalAlpha)
+	{
+		Color32 ret;
+		uint32_t alpha = a;
+		alpha = (alpha > globalAlpha ? globalAlpha : alpha) + 1;
+
+		// Special cases
+		if (alpha == 256)
+			return *this;
+		if (alpha == 1)
+			return background;
+
+		uint32_t inv_alpha = 256 - (alpha - 1);
+		ret.r = (unsigned char)((alpha * r + inv_alpha * background.r) >> 8);
+		ret.g = (unsigned char)((alpha * g + inv_alpha * background.g) >> 8);
+		ret.b = (unsigned char)((alpha * b + inv_alpha * background.b) >> 8);
+		ret.a = 255;
+		//uint8_t backgroundAlpha = 255 - a;
+		//ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
+		//ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
+		//ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
+		//ret.a = 255;
+		return ret;
+	}
 	bool operator==(const Color32 &rhs)
 	{
 		if ((this->a == rhs.a) && (this->r == rhs.r) && (this->g == rhs.g) && (this->b == rhs.b))
@@ -168,6 +192,12 @@ struct PACK Color32
 		return ret;
 	}
 
+	inline void	SwapRGBChannels()
+	{
+		uint8_t temp = r;
+		r = b;
+		b = temp;
+	}
 
 	inline bool CompareSansAlpha(const Color32 in)
 	{
@@ -301,6 +331,37 @@ struct PACK FontDatabaseFile
 										//!< 255 = fully opaque. 0 = transparent (background)
 };
 
+enum TextAlignment
+{
+	eAlignLeft,
+	eAlignRight,
+	eAlignCenter
+};
+
+// BMP file format
+// We use the BMP format for our images since it is simple and has 32 bit ARGB capability
+struct PACK BMPImage
+{
+	char		id[2];		// Should be "BM"
+	int32_t		bmpSize;	// Size of total file
+	int16_t		reserved1;
+	int16_t		reserved2;
+	int32_t		offset;		// Offset to pixel array
+	// DIB header
+	int32_t		headerSize;	// DIB header size
+	int32_t		width;		// Image width
+	int32_t		height;		// Image height
+	int16_t		planes;		// Number of image planes
+	int16_t		bpp;		// Bit per pixel
+	int32_t		compression;// BI_RGB is all we support
+	int32_t		arraySize;	// Number of bytes in pixel array
+	int32_t		horizRes;	// Horizontal resolution
+	int32_t		vertRes;	// Vertical resolution
+	int32_t		paletteColors; // Number of colors in palette
+	int32_t		impColors;	// Important colors
+	Color32		pixelArray;	// Start of pixel array
+};
+
 // ProfileData is used to profile the code and measure where the bottlenecks are
 struct ProfileData
 {
@@ -370,6 +431,8 @@ public:
 	virtual bool	AllocateFramebuffer(FramebufferProperties& properties) = 0;
 	virtual void	FreeFramebuffer() = 0;
 	virtual void	FillRectangle(Rect rect, Color32 argb);
+	static void		PrepareBMP(BMPImage* image);
+	virtual void	DrawBMP(Point& dstLoc, BMPImage* image, bool alphaBlend);
 	virtual void	CopyToPrimary(std::vector<Rect> rects, bool alphaBlend=false);
 	virtual void	CopyBackToFront(Rect& rect);
 	virtual void	GradientLine(Color32 startColor, Color32f colorDelta, int16_t startX, int16_t endX, int16_t y);
@@ -389,8 +452,10 @@ public:
 					  int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide, int32_t stepAngleWide=20);
 
 	// Text functions
+	virtual int16_t	GetTextDrawnLength(FontDatabaseFile* font, char* text);
+	virtual void	DrawText(FontDatabaseFile* font, char* text, Point& loc, Color32& color, bool alphaBlend, TextAlignment align);
 	virtual int16_t	GetTextDrawnLength(FontDatabaseFile* font, std::string& text);
-	virtual void	DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color, bool alphaBlend);
+	virtual void	DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& color, bool alphaBlend, TextAlignment align);
 	
 	void SetClippingRect(Rect& rect)	{ mClippingRect = rect; };
 	Rect GetClippingRect()				{ return mClippingRect; };
@@ -411,6 +476,8 @@ public:
 	bool					GetAntiAlias()				{ return mAntiAlias; };
 	void					EnableDirtyRects(Region* region)	{ mDirtyRegion = region; };
 	void					DisableDirtyRects()			{ mDirtyRegion = NULL; };
+	void					SetGlobalAlpha(uint8_t a)	{ mGlobalAlpha = a; };
+	uint8_t					GetGlobalAlpha(uint8_t a)	{ return mGlobalAlpha; };
 
 	const FramebufferProperties& GetFramebufferProperties()	{ return mFBProperties; };
 
@@ -435,6 +502,7 @@ protected:
 	Rect					mClippingRect;			//!< Clipping rectangle from drawing functions
 	Point					mScreenOffset;			//!> x/y offset relative to primary surface
 	Region*					mDirtyRegion;			//!< If non-null, use this region to track dirty rects
+	uint8_t					mGlobalAlpha;			//!< Global alpha to apply to alpha blending (or eOpaque)
 
 	// Put all the bools/non-aligned stuff at the end
 	bool					mAntiAlias;				//!< If true, apply anti-aliasing

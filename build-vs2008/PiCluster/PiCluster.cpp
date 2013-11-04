@@ -20,11 +20,20 @@ GraphicsContextWin gFontDB;						// Context for generating font info
 // Font databases are global
 FontDatabaseFile*	gFontErasDemi18 = NULL;		// 18 point Eras Demi ITC
 
+// Images
+BMPImage*			gWaterTempImage = NULL;
+BMPImage*			gFuelImage		= NULL;
+BMPImage*			gCarTopView		= NULL;
+BMPImage*			gLeftArrowImage	= NULL;
+BMPImage*			gRightArrowImage= NULL;
+
 // Forward declarations of functions included in this code module:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
+bool LoadFontResource(FontDatabaseFile** ptr, char* filename);
+bool LoadImageResource(BMPImage** ptr, char* filename);
 
 int APIENTRY _tWinMain(HINSTANCE hInstance,
                      HINSTANCE hPrevInstance,
@@ -144,21 +153,17 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
   // while(1);
 
+   LoadFontResource(&gFontErasDemi18, "Eras Demi ITC.bin");
+   LoadImageResource(&gWaterTempImage, "..\\..\\bitmaps\\Water.bmp");
+   LoadImageResource(&gFuelImage, "..\\..\\bitmaps\\Fuel.bmp");
+   LoadImageResource(&gCarTopView, "..\\..\\bitmaps\\CamaroGrey.bmp");
+   LoadImageResource(&gLeftArrowImage, "..\\..\\bitmaps\\LeftArrow.bmp");
+   LoadImageResource(&gRightArrowImage, "..\\..\\bitmaps\\RightArrow.bmp");
+   
    Rect rect(0, 0, 1280, 480);
    gCluster.Init(rect);
    gFontDB.CreateFontDatabase("Eras Demi ITC", 18);
 
-   FILE* fp;
-   if (!fopen_s(&fp, "Eras Demi ITC.bin", "rb"))
-   {
-	   // Read the file size
-	   uint32_t fileSize;
-	   fread(&fileSize, 1, 4, fp);
-	   fileSize = fileSize;
-	   gFontErasDemi18 = (FontDatabaseFile*)malloc(fileSize);
-	   gFontErasDemi18->fileSize = fileSize;
-	   fread(&gFontErasDemi18->fontName, 1, fileSize - 4, fp);
-   }
    return TRUE;
 }
 
@@ -322,3 +327,57 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	return (INT_PTR)FALSE;
 }
+
+bool LoadFontResource(FontDatabaseFile** ptr, char* filename)
+{
+	FILE* fp = NULL;
+	if (!fopen_s(&fp, filename, "rb"))
+	{
+		// Read the file size
+		uint32_t fileSize;
+		fread(&fileSize, 1, 4, fp);
+		fileSize = fileSize;
+		*ptr = (FontDatabaseFile*)malloc(fileSize);
+		(*ptr)->fileSize = fileSize;
+		fread(&((*ptr)->fontName), 1, fileSize - 4, fp);
+	}
+	fclose(fp);
+	return fp ? true : false;
+}
+
+bool LoadImageResource(BMPImage** ptr, char* filename)
+{
+	FILE* fp = NULL;
+	do
+	{
+		if (!fopen_s(&fp, filename, "rb"))
+		{
+			// Read the ID, make sure it looks like a BMP
+			char id[3] = { 0 };
+			fread(id, 1, 2, fp);
+			if (id[0] != 'B' || id[1] != 'M')
+			   break;
+			uint32_t fileSize;
+			fread(&fileSize, 1, 4, fp);
+			fileSize = fileSize;
+			*ptr = (BMPImage*)malloc(fileSize);
+			(*ptr)->id[0] = 'B';
+			(*ptr)->id[1] = 'M';
+			(*ptr)->bmpSize = fileSize;
+			// Windows pads the 2 bytes of ID, so add two bytes
+			fread((uint8_t*)(*ptr) + 8, 1, fileSize - 6, fp);
+		}
+	} while (false);
+	if (fp)
+		fclose(fp);
+	return fp ? true : false;
+}
+
+
+
+
+
+
+
+
+

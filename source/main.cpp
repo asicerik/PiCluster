@@ -13,6 +13,14 @@
 extern FontDatabaseFile	gFontErasDemi18Rom;		// 18 point Eras Demi ITC
 FontDatabaseFile*		gFontErasDemi18 = &gFontErasDemi18Rom;
 
+// Image imports from binary
+extern BMPImage			gCarTopViewRom;
+extern BMPImage			gWaterTempImageRom;
+extern BMPImage			gFuelImageRom;
+BMPImage*				gCarTopView		= &gCarTopViewRom;
+BMPImage*				gWaterTempImage = &gWaterTempImageRom;
+BMPImage*				gFuelImage		= &gFuelImageRom;
+
 int main(int argc, char** argv)
 {
 	bcm2835_init();
@@ -24,6 +32,11 @@ int main(int argc, char** argv)
 
 	UartInit();
 	dmaInit();
+
+	// The BMP images have their R & B channels swapped, so reverse them
+	GraphicsContextBase::PrepareBMP(gCarTopView);
+	GraphicsContextBase::PrepareBMP(gWaterTempImage);
+	GraphicsContextBase::PrepareBMP(gFuelImage);
 
 	UartPrintf("Calling cluster.Init()\n");
 	InstrumentCluster cluster;
@@ -43,7 +56,7 @@ int main(int argc, char** argv)
 		UartPrintf("Cluster.Init() failed!\n");
 	}
 
-	int i=7;
+	int i=0;
 	while (i-- > 0)
 	{
 		UartPrintf("\r%d    ", i);

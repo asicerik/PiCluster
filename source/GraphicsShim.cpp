@@ -51,6 +51,7 @@ GraphicsContextBase::GraphicsContextBase()
 	mBackBufferPtr		= NULL;
 	mScreenOffset.x = mScreenOffset.y = 0;
 	mDirtyRegion		= NULL;
+	mGlobalAlpha		= eOpaque;
 }
 
 GraphicsContextBase* 
@@ -198,6 +199,49 @@ GraphicsContextBase::FillRectangle(Rect rect, Color32 argb)
 }
 
 void
+GraphicsContextBase::PrepareBMP(BMPImage* image)
+{
+#ifndef WIN32
+	if (image == NULL)
+		return;
+	for (int16_t y = 0; y < image->height; y++)
+	{
+		Color32* src = &(image->pixelArray) + (image->height - y - 1) * (image->width);
+		for (int16_t x = 0; x < image->width; x++)
+		{
+			src->SwapRGBChannels();
+			src++;
+		}
+	}
+#endif
+}
+
+void
+GraphicsContextBase::DrawBMP(Point& dstLoc, BMPImage* image, bool alphaBlend)
+{
+	if (image == NULL)
+		return;
+	for (int16_t y = 0; y < image->height; y++)
+	{
+		Color32* src = &(image->pixelArray) + (image->height - y - 1) * (image->width);
+		Color32* dst = mCurrBufferPtr + dstLoc.x + (y + dstLoc.y) * (mFBProperties.mStride >> 2);
+		if (alphaBlend)
+		{
+			for (int16_t x = 0; x < image->width; x++)
+			{
+				*dst = src->AlphaBlend(*dst, mGlobalAlpha);
+				src++;
+				dst++;
+			}
+		}
+		else
+		{
+			memcpy(dst, src, (image->width) * 4);
+		}
+	}
+}
+
+void
 GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 {
 	// We can't copy to ourselves
@@ -311,7 +355,7 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 			{
 				for (int16_t x = 0; x < srcRect.w; x++)
 				{
-					*dst = src->AlphaBlend(*dst);
+					*dst = src->AlphaBlend(*dst, mGlobalAlpha);
 					src++;
 					dst++;
 					Sleep(0);
@@ -333,7 +377,7 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 				Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + dstRect.x + (y + dstRect.y) * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
 				for (int16_t x = 0; x < srcRect.w; x++)
 				{
-					*dst = src->AlphaBlend(*dst);
+					*dst = src->AlphaBlend(*dst, mGlobalAlpha);
 					src++;
 					dst++;
 				}
@@ -913,6 +957,13 @@ GraphicsContextBase::DrawCircle(Color32 color, Point origin, int16_t radius, boo
 }
 
 int16_t	
+GraphicsContextBase::GetTextDrawnLength(FontDatabaseFile* font, char* text)
+{
+	std::string textString(text);
+	return GetTextDrawnLength(font, textString);
+}
+
+int16_t	
 GraphicsContextBase::GetTextDrawnLength(FontDatabaseFile* font, std::string& text)
 {
 	int16_t length = 0;
@@ -925,7 +976,14 @@ GraphicsContextBase::GetTextDrawnLength(FontDatabaseFile* font, std::string& tex
 }
 
 void
-GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& colorIn, bool alphaBlend)
+GraphicsContextBase::DrawText(FontDatabaseFile* font, char* text, Point& loc, Color32& colorIn, bool alphaBlend, TextAlignment align)
+{
+	std::string textString(text);
+	DrawText(font, textString, loc, colorIn, alphaBlend, align);
+}
+
+void
+GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& loc, Color32& colorIn, bool alphaBlend, TextAlignment align)
 {
 	//UartPrintf("font=%p, fileSize=%d, cols=%d, width=%p, height=%p\n", font, font->fileSize, font->columns, font->cellWidth, font->cellHeight);
 
@@ -934,10 +992,19 @@ GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& 
 
 	PROFILE_START(mProfileData.mDrawText)
 
+	// Calculate the extents of the text we are about to draw
+	int16_t  width		= GetTextDrawnLength(font, text);
+	Point textLoc		= loc;
+	textLoc.y += font->fontDescent;
+
+	if (align == eAlignCenter)
+		textLoc.x -= width / 2;
+	else if (align == eAlignRight)
+		textLoc.x -= width;
+	
 	Color32 color = colorIn;
 	uint32_t fontStride = font->cellWidth * font->columns;
-	int16_t  width		= font->cellWidth * text.length();
-	int16_t  dstX		= loc.x;
+	int16_t  dstX		= textLoc.x;
 
 	for (size_t i = 0; i < (uint16_t)text.length(); i++)
 	{
@@ -950,7 +1017,7 @@ GraphicsContextBase::DrawText(FontDatabaseFile* font, std::string& text, Point& 
 		for (int16_t y = 0; y < (uint16_t)font->cellHeight; y++)
 		{
 			uint8_t* src = currChar + y * fontStride;
-			Color32* dst = mCurrBufferPtr + dstX + (loc.y + y) * (mFBProperties.mStride >> 2);
+			Color32* dst = mCurrBufferPtr + dstX + (textLoc.y + y) * (mFBProperties.mStride >> 2);
 			for (int16_t x = 0; x < font->cellWidth; x++)
 			{
 				if (*src)
@@ -981,15 +1048,22 @@ GraphicsContextBase::DrawEmboss(Color32 colorMax, Point origin, int16_t innerRad
 {
 	Color32 color;
 	color.a = eOpaque;
-	for (int32_t angleWide = startAngleWide; angleWide <= endAngleWide; angleWide += stepAngleWide)
+	int32_t angleInc = startAngleWide < endAngleWide ? stepAngleWide : -stepAngleWide;
+	for (int32_t angleWide = startAngleWide; (stepAngleWide > 0 ? (angleWide <= endAngleWide) : (angleWide >= endAngleWide)); angleWide += angleInc)
 	{
+		// Simple hack that keeps color ranges from overflowing into the next region
+		if (angleInc > 0)
+		{
+			if ((angleWide + stepAngleWide) > (endAngleWide + 1))
+				stepAngleWide = 4;
+		}
 		int32_t offset = Trig::ClipWideDegree(angleWide - peakAngleWide);
 		int32_t shift  = offset < 720 ? (720 - offset) : (offset - 720);
 		color.r = (uint8_t)(colorMax.r * shift / 720);
 		color.g = (uint8_t)(colorMax.g * shift / 720);
 		color.b = (uint8_t)(colorMax.b * shift / 720);
 
-		DrawTrapezoid(color, origin, angleWide + stepAngleWide/2, innerRadius, outerRadius, 
+		DrawTrapezoid(color, origin, Trig::ClipWideDegree(angleWide + stepAngleWide/2), innerRadius, outerRadius, 
 			stepAngleWide, stepAngleWide, true,
 			eAntiAliasS1S3	// Only anti-alias side 1 and 3 (top/bottom). If we do it on the sides, we will see a boundary
 		);
