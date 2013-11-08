@@ -17,6 +17,7 @@ public:
 	void Draw();
 	ClusterElement& GetPrimarySurface()	{ return mPrimarySurface; };
 	Region							mDirty;			//!< Region that need to be drawn to screen
+	ClusterElement	GetBackground()		{ return mBackground; };
 
 	// Images and fonts
 	//static GraphicsContext			mFontEras18;	//!< 18 point Eras Demi ITC font

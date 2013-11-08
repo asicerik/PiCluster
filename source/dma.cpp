@@ -7,11 +7,16 @@
 
 
 #else
+#include "malloc.h"
 #include "bcm2835.h"
 #include "uart0.h"
 #include "dma.h"
 #include "GraphicsShim.h"
 
+extern "C"
+{
+	extern void flush_writeback ( uintptr_t start, uintptr_t end );
+}
 
 // We will use DMA channel 14 for our ops. Just in case something else is using channel 0, etc.
 uint8_t*  dma0	 				= (uint8_t*)BCM2835_DMA_BASE;
@@ -48,6 +53,8 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 	PROFILE_START(GraphicsContextBase::mProfileData.mDMA)
 
 	bool res = false;
+	DmaControlBlockData* cb = (DmaControlBlockData*)memalign(32, sizeof(DmaControlBlockData));
+
 	uint32_t w = dstRect.w < srcRect.w ? dstRect.w : srcRect.w;
 	uint32_t h = dstRect.h < srcRect.h ? dstRect.h : srcRect.h;
 
@@ -57,6 +64,7 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 	uint32_t dmaSrcStride = srcStride - w * sizeof(uint32_t);
 	uint32_t dmaDstStride = dstStride - w * sizeof(uint32_t);
 
+//	UartPrintf("cb=%p, src=%p, dst=%p\n", cb, src, dst);
 //	UartPrintf("srcRect=%d,%d:%d,%d, dstRect=%d,%d:%d,%d\n",
 //			srcRect.x, srcRect.y, srcRect.w, srcRect.h,
 //			dstRect.x, dstRect.y, dstRect.w, dstRect.h);
@@ -74,17 +82,18 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 		if ((dstRect.x + w) > 1280 || (dstRect.x + w) < 1 || (dstRect.y + h) > 480 || (dstRect.y + h) < 1)
 			break;
 
-		DmaControlBlockData cb;
-		cb.SourceAddress		= (uint32_t)(src + srcRect.x + (srcRect.y * srcStride / 4));
-		cb.DestinationAddress	= (uint32_t)(dst + dstRect.x + (dstRect.y * dstStride / 4));
-		cb.TransferLength		= (h << 16) | (w * sizeof(uint32_t));
-		cb.Stride2D				= ((dmaDstStride & 0x7ffff) << 16) | (dmaSrcStride & 0x7fff);
-		cb.NextControlBlock		= 0;
-		cb.reserved0			= 0;
-		cb.reserved1			= 0;
+		cb->SourceAddress		= 0x40000000 | (uint32_t)(src + srcRect.x + (srcRect.y * srcStride / 4));
+		cb->DestinationAddress	= 0x40000000 | (uint32_t)(dst + dstRect.x + (dstRect.y * dstStride / 4));
+		cb->TransferLength		= (h << 16) | (w * sizeof(uint32_t));
+		cb->Stride2D			= ((dmaDstStride & 0x7ffff) << 16) | (dmaSrcStride & 0x7fff);
+		cb->NextControlBlock	= 0;
+		cb->reserved0			= 0;
+		cb->reserved1			= 0;
+
 		// Configure the transfer
-		cb.TransferInformation	=
+		cb->TransferInformation	=
 				  //DMA_TI_WAIT_RESP  |
+				  0x8 << DMA_TI_BURST_LEN_SHIFT | 	// burst size = 8
 				  DMA_TI_TD_MODE	|	// 2d mode
 				  DMA_TI_DEST_INC	|	// increment the dest addr after each transfer
 				  DMA_TI_DEST_WIDTH	|	// use 128 bit transfers
@@ -92,8 +101,13 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 				  DMA_TI_SRC_WIDTH		// use 128 bit transfers
 		;
 
+		// Flush the write-back cache to make all the memory has been written
+		flush_writeback( (uintptr_t)cb, (uintptr_t)(cb + 1));
+
+		//UartPrintf("DMA transfer starting. CS=%p, txfr_len=%p, conBlk=%p, nextConBlk=%p, debug=%p\n", *dma14ControlStatus, *dma14TransferLen, *dma14ControlBlockAddr, *dma14NextControlBlock, *dma14Debug);
+
 		// To start the dma transfer, first write the address of our control block
-		*dma14ControlBlockAddr		= (uint32_t)&cb;
+		*dma14ControlBlockAddr		= 0x40000000 | (uint32_t)cb;
 
 		// Now tell the DMA engine to start the transfer
 		*dma14ControlStatus			= DMA_CS_ACTIVE | DMA_CS_DISABLE_DEBUG;
@@ -101,10 +115,10 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 		// We poll on the DMA control/status register to wait for completion
 		while (*dma14ControlStatus & DMA_CS_ACTIVE)
 		{
-			//UartPrintf("DMA transfer pending. CS=%p, txfr_len=%p\n", *dma14ControlStatus, *dma14TransferLen);
+			//UartPrintf("DMA transfer pending. CS=%p, txfr_len=%p, conBlk=%p, nextConBlk=%p, debug=%p\n", *dma14ControlStatus, *dma14TransferLen, *dma14ControlBlockAddr, *dma14NextControlBlock, *dma14Debug);
 		}
-	//	UartPrintf("DMA transfer done. CS=%p, txfr_len=%p, txfr_info=%p, debug=%p\n", *dma14ControlStatus, *dma14TransferLen, *dma14TransferInfo, *dma14Debug);
-	//	UartPrintf("int_status=%p, enable=%p\n", *dmaInterruptStatus, *dmaEnable);
+//		UartPrintf("DMA transfer done. CS=%p, txfr_len=%p, txfr_info=%p, debug=%p\n", *dma14ControlStatus, *dma14TransferLen, *dma14TransferInfo, *dma14Debug);
+//		UartPrintf("int_status=%p, enable=%p\n", *dmaInterruptStatus, *dmaEnable);
 
 		// Clear the control register
 		*dma14ControlStatus			= 0;
@@ -112,6 +126,8 @@ bool __attribute__((optimize("O0"))) dmaBitBlt(Color32* dst, Rect& dstRect, uint
 
 		res = true;
 	} while (false);
+
+	free(cb);
 
 	PROFILE_STOP(GraphicsContextBase::mProfileData.mDMA)
 

@@ -129,6 +129,15 @@ void
 DialGuage::SetValue(uint16_t val)
 {
 	if (mMinInt > mMaxInt)
+	{
+		val = Clip(val, mMaxInt, mMinInt);
+	}
+	else
+	{
+		val = Clip(val, mMinInt, mMaxInt);
+	}
+
+	if (mMinInt > mMaxInt)
 		mCurrentAngleWide = mMaxAngleWide + (val * mValToAngle);
 	else
 		mCurrentAngleWide = (val * mValToAngle) + mMinAngleWide;

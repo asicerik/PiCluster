@@ -16,3 +16,15 @@ gWaterTempImageRom:
 gFuelImageRom:
 .incbin "../../bitmaps/Fuel.bmp"
 
+.section .data
+.align 4
+.globl gLeftArrowImageRom
+gLeftArrowImageRom:
+.incbin "../../bitmaps/LeftArrow.bmp"
+
+.section .data
+.align 4
+.globl gRightArrowImageRom
+gRightArrowImageRom:
+.incbin "../../bitmaps/RightArrow.bmp"
+

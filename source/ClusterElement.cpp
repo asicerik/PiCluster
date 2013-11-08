@@ -58,9 +58,15 @@ ClusterElement::Init(const Rect& box, bool isPrimary, bool doubleBuffer)
 		properties.mGeometry = box;
 
 		if (isPrimary)
+		{
 			mGfx.AllocatePrimaryFramebuffer(properties);
+			mGfx.SetSurfaceSelection(ePrimaryFront);
+		}
 		else
+		{
 			mGfx.AllocateFramebuffer(properties);
+			mGfx.SetSurfaceSelection(eFront);
+		}
 
 		// Mark the background/foregraond invalid so that they will get drawn
 		mBackgroundDirtyRegion.AddRect(mClientRect);
@@ -220,6 +226,23 @@ ClusterElement::Draw()
 
 	if (!mForegroundDirtyRegion.GetDirtyRects().empty())
 	{
+		// Trim the foreground region to our client rect
+		Region clientRegion(mClientRect);
+		mForegroundDirtyRegion = mForegroundDirtyRegion.CombineRegion(mForegroundDirtyRegion, clientRegion, Region::eAnd);
+
+		//Color32 color(0,0,0,eOpaque);
+		//color.r = 255;
+		//std::vector<Rect>& rects = mForegroundDirtyRegion.GetDirtyRects();
+		//std::vector<Rect>::iterator iter = rects.begin();
+		//for (; iter != rects.end(); iter++)
+		//{
+		//	Rect rect = *iter;
+		//	mGfx.DrawLine(color, rect.x, rect.y, rect.x + rect.w -1, rect.y);
+		//	mGfx.DrawLine(color, rect.x + rect.w - 1, rect.y, rect.x + rect.w - 1, rect.y + rect.h - 1);
+		//	mGfx.DrawLine(color, rect.x, rect.y + rect.h - 1, rect.x + rect.w - 1, rect.y + rect.h - 1);
+		//	mGfx.DrawLine(color, rect.x, rect.y, rect.x, rect.y + rect.h - 1);
+		//}
+
 		// Copy the affected region to the primary surface
 		mGfx.CopyToPrimary(mForegroundDirtyRegion.GetDirtyRects(), mImage ? true : false);
 	}

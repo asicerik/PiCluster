@@ -309,6 +309,8 @@
 #define BCM2835_ST_BASE					(BCM2835_PERI_BASE + 0x3000)
 /// Base Physical Address of the DMA registers
 #define BCM2835_DMA_BASE				(BCM2835_PERI_BASE + 0x7000)
+/// Base Physical Address of the interrupt registers
+#define BCM2835_INTERRUPT_BASE          (BCM2835_PERI_BASE + 0xB000)
 /// Base Physical Address of the DMA registers for channel 15
 #define BCM2835_DMA15_BASE				(BCM2835_PERI_BASE + 0xE05000)
 /// Base Physical Address of the Pads registers
@@ -679,6 +681,18 @@ typedef enum
 
 /// @}
 
+
+// Defines for Interrupt byte offsets
+#define BCM2835_IRQ_BASIC_PENDING		0x200
+#define BCM2835_IRQ_PENDING_1			0x204
+#define BCM2835_IRQ_PENDING_2			0x208
+#define BCM2835_IRQ_FIQ_CONTROL			0x20c
+#define BCM2835_IRQ_EN_IRQ_1			0x210
+#define BCM2835_IRQ_EN_IRQ_2			0x214
+#define BCM2835_IRQ_EN_BASIC_IRQ		0x218
+#define BCM2835_IRQ_DIS_IRQ_1			0x21c
+#define BCM2835_IRQ_DIS_IRQ_2			0x220
+#define BCM2835_IRQ_DIS_BASIC_IRQ		0x224
 
 // Defines for PWM, word offsets (ie 4 byte multiples)
 #define BCM2835_PWM_CONTROL 0

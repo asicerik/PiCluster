@@ -17,9 +17,20 @@ FontDatabaseFile*		gFontErasDemi18 = &gFontErasDemi18Rom;
 extern BMPImage			gCarTopViewRom;
 extern BMPImage			gWaterTempImageRom;
 extern BMPImage			gFuelImageRom;
+extern BMPImage			gLeftArrowImageRom;
+extern BMPImage			gRightArrowImageRom;
+
 BMPImage*				gCarTopView		= &gCarTopViewRom;
 BMPImage*				gWaterTempImage = &gWaterTempImageRom;
 BMPImage*				gFuelImage		= &gFuelImageRom;
+BMPImage*				gLeftArrowImage	= &gLeftArrowImageRom;
+BMPImage*				gRightArrowImage= &gRightArrowImageRom;
+
+// External functions
+extern "C"
+{
+	int mmuInit ( void );
+}
 
 int main(int argc, char** argv)
 {
@@ -27,34 +38,12 @@ int main(int argc, char** argv)
 
 	// Set pin 16 ('ACT' led) to output mode
 	bcm2835_gpio_fsel(16, BCM2835_GPIO_FSEL_OUTP);
-	// Turn on the led
-	bcm2835_gpio_clr(16);
+	// Turn off the led
+	bcm2835_gpio_set(16);
 
 	UartInit();
+
 	dmaInit();
-
-	// The BMP images have their R & B channels swapped, so reverse them
-	GraphicsContextBase::PrepareBMP(gCarTopView);
-	GraphicsContextBase::PrepareBMP(gWaterTempImage);
-	GraphicsContextBase::PrepareBMP(gFuelImage);
-
-	UartPrintf("Calling cluster.Init()\n");
-	InstrumentCluster cluster;
-	FramebufferProperties properties;
-	properties.mGeometry.x = properties.mGeometry.y = 0;
-	properties.mGeometry.w	= 1280;
-	properties.mGeometry.h	= 480;
-	properties.mBitsPerPixel= 32;
-	bool res = cluster.Init(properties.mGeometry);
-	GraphicsContextPi ctx = cluster.GetPrimarySurface().GetGraphicsContext();
-	if (res)
-	{
-		UartPrintf("Cluster.Init() succeeded\n");
-	}
-	else
-	{
-		UartPrintf("Cluster.Init() failed!\n");
-	}
 
 	int i=0;
 	while (i-- > 0)
@@ -66,6 +55,45 @@ int main(int argc, char** argv)
 		bcm2835_st_delay(bcm2835_st_read(), 500000);
 	}
 	UartPrintf("\n");
+
+	// The BMP images have their R & B channels swapped, so reverse them
+	GraphicsContextBase::PrepareBMP(gCarTopView);
+	GraphicsContextBase::PrepareBMP(gWaterTempImage);
+	GraphicsContextBase::PrepareBMP(gFuelImage);
+	GraphicsContextBase::PrepareBMP(gLeftArrowImage);
+	GraphicsContextBase::PrepareBMP(gRightArrowImage);
+
+	UartPrintf("Calling cluster.Init()\n");
+	InstrumentCluster cluster;
+	FramebufferProperties properties;
+	properties.mGeometry.x = properties.mGeometry.y = 0;
+	properties.mGeometry.w	= 1280;
+	properties.mGeometry.h	= 480;
+	properties.mBitsPerPixel= 32;
+
+	bool res;
+	GraphicsContextPi ctx;
+	res = cluster.Init(properties.mGeometry);
+	ctx = cluster.GetPrimarySurface().GetGraphicsContext();
+	if (res)
+	{
+		UartPrintf("Cluster.Init() succeeded\n");
+	}
+	else
+	{
+		UartPrintf("Cluster.Init() failed!\n");
+	}
+
+	// MMU init
+	UartPrintf("Initializing MMU\n");
+	if (mmuInit())
+	{
+		UartPrintf("MMU failed!\n");
+	}
+	else
+	{
+		UartPrintf("MMU init succeeded!\n");
+	}
 
 	/*
 	Tests tests;
@@ -87,40 +115,33 @@ int main(int argc, char** argv)
 	if (res)
 	{
 		cluster.GetPrimarySurface().Invalidate(properties.mGeometry);
-		bool on = true;
+		bool on = false;
 		int i=0;
 
 		int frames = 0;
 		uint64_t lastUpdate = bcm2835_st_read();
 
 		UartPrintf("\n");
-		Rect srcRect(1,1,360,360);
-		Rect dstRect(640,0,360,360);
+
+		// Turn on the led
+		bcm2835_gpio_clr(16);
+
 		while (res)
 		{
 			cluster.Update();
 
 			cluster.Draw();
 
+			// Wait for the vertical blank so we don't get tearing
+			ctx.WaitForVSync();
+
 			// Copy to the screen
-			Rect dirty = cluster.mDirty.GetDirtyRect();
-			cluster.GetPrimarySurface().GetGraphicsContext().CopyBackToFront(dirty);
+			std::vector<Rect>& dirty = cluster.mDirty.GetDirtyRects();
+			std::vector<Rect>::iterator iter = dirty.begin();
+			for (; iter != dirty.end(); iter++)
+				cluster.GetPrimarySurface().GetGraphicsContext().CopyBackToFront(*iter);
 
 			Color32* ptr = ctx.GetFrontBuffer();
-//			uint32_t stride = 1280*4;
-//			dstRect.x = 640;
-//			dstRect.y = 0;
-//			for (i=0;i<50;i++)
-//			{
-//				dmaBitBlt(ptr, dstRect, stride, ptr, srcRect, stride);
-//				dstRect.x++;
-//			}
-//			for (i=0;i<50;i++)
-//			{
-//				dmaBitBlt(ptr, dstRect, stride, ptr, srcRect, stride);
-//				dstRect.y++;
-//			}
-
 
 			frames++;
 			// Update fps once per second (st_read is in microsecs)

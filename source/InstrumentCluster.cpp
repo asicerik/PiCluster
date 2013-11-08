@@ -222,11 +222,15 @@ InstrumentCluster::Update()
 
 	bool res = false;
 	static int16_t rpm = 0;
+	static int16_t speed = 0;
+	static int16_t fuel = 0;
+	static int16_t temp = 0;
 	do
 	{
 		mTach.SetValue(rpm);
-		mSpeedo.SetValue(rpm / 100);
-		mFuel.SetValue(rpm / 100);
+		mSpeedo.SetValue(speed);
+		mFuel.SetValue(fuel);
+		mWaterTemp.SetValue(temp);
 		mInfoCenter.SetTirePressures(rpm / 4000, rpm / 4000 + 1, rpm / 4000 + 2, rpm / 4000 + 3);
 		if (GetTimeMs() >= mNextFlasherChange)
 		{
@@ -242,11 +246,18 @@ InstrumentCluster::Update()
 				mRightArrow.SetVisible(true);
 			}
 		}
-		rpm += 50;
+		rpm += 100;
 		if (rpm >= 8000)
-		{
 			rpm = 0;
-		}
+		speed += 1;
+		if (speed >= 180)
+			speed = 0;
+		fuel -= 1;
+		if (fuel <= 0)
+			fuel = 100;
+		temp += 1;
+		if (temp >= 100)
+			temp = 0;
 
 		// Go through all the elements in top-down Z order
 		// Elements will return any background regions that were exposed

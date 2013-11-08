@@ -11,7 +11,7 @@
 #endif
 
 // NOTE : this structure needs to be 256-bit aligned
-struct ALIGN_32 DmaControlBlockData
+struct DmaControlBlockData
 {
 	uint32_t	TransferInformation;
 	uint32_t	SourceAddress;

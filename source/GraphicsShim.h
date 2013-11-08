@@ -107,12 +107,20 @@ struct Color32
 		if (a == 0)
 			return background;
 
+#ifdef PRE_MULT
+		uint32_t inv_alpha = 256 - a;
+		ret.r = (unsigned char)((r + inv_alpha * background.r) >> 8);
+		ret.g = (unsigned char)((g + inv_alpha * background.g) >> 8);
+		ret.b = (unsigned char)((b + inv_alpha * background.b) >> 8);
+		ret.a = 255;
+#else
 		uint32_t alpha = a + 1;
 		uint32_t inv_alpha = 256 - a;
 		ret.r = (unsigned char)((alpha * r + inv_alpha * background.r) >> 8);
 		ret.g = (unsigned char)((alpha * g + inv_alpha * background.g) >> 8);
 		ret.b = (unsigned char)((alpha * b + inv_alpha * background.b) >> 8);
 		ret.a = 255;
+#endif
 		//uint8_t backgroundAlpha = 255 - a;
 		//ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
 		//ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
@@ -132,11 +140,19 @@ struct Color32
 		if (alpha == 1)
 			return background;
 
+#ifdef PRE_MULT
+		uint32_t inv_alpha = 256 - (alpha - 1);
+		ret.r = (unsigned char)((r + inv_alpha * background.r) >> 8);
+		ret.g = (unsigned char)((g + inv_alpha * background.g) >> 8);
+		ret.b = (unsigned char)((b + inv_alpha * background.b) >> 8);
+		ret.a = 255;
+#else
 		uint32_t inv_alpha = 256 - (alpha - 1);
 		ret.r = (unsigned char)((alpha * r + inv_alpha * background.r) >> 8);
 		ret.g = (unsigned char)((alpha * g + inv_alpha * background.g) >> 8);
 		ret.b = (unsigned char)((alpha * b + inv_alpha * background.b) >> 8);
 		ret.a = 255;
+#endif
 		//uint8_t backgroundAlpha = 255 - a;
 		//ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
 		//ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
@@ -189,6 +205,30 @@ struct PACK Color32
 		ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
 		ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
 		ret.a = 255;
+		return ret;
+	}
+	inline Color32	 AlphaBlend(Color32 background, uint8_t globalAlpha)
+	{
+		Color32 ret;
+		uint32_t alpha = a;
+		alpha = (alpha > globalAlpha ? globalAlpha : alpha) + 1;
+
+		// Special cases
+		if (alpha == 256)
+			return *this;
+		if (alpha == 1)
+			return background;
+
+		uint32_t inv_alpha = 256 - (alpha - 1);
+		ret.r = (unsigned char)((alpha * r + inv_alpha * background.r) >> 8);
+		ret.g = (unsigned char)((alpha * g + inv_alpha * background.g) >> 8);
+		ret.b = (unsigned char)((alpha * b + inv_alpha * background.b) >> 8);
+		ret.a = 255;
+		//uint8_t backgroundAlpha = 255 - a;
+		//ret.r = SATURATE_II(((uint16_t)r * a + (uint16_t)background.r * backgroundAlpha) >> 8);
+		//ret.g = SATURATE_II(((uint16_t)g * a + (uint16_t)background.g * backgroundAlpha) >> 8);
+		//ret.b = SATURATE_II(((uint16_t)b * a + (uint16_t)background.b * backgroundAlpha) >> 8);
+		//ret.a = 255;
 		return ret;
 	}
 
@@ -450,6 +490,7 @@ public:
 	virtual void	FloodFill(int16_t x, int16_t y, uint32_t borderColor, uint32_t fillColor);
 	virtual void	DrawEmboss(Color32 colorMax, Point origin, int16_t innerRadius, int16_t outerRadius, 
 					  int32_t startAngleWide, int32_t endAngleWide, int32_t peakAngleWide, int32_t stepAngleWide=20);
+	virtual void	WaitForVSync()	{};
 
 	// Text functions
 	virtual int16_t	GetTextDrawnLength(FontDatabaseFile* font, char* text);
@@ -604,6 +645,7 @@ public:
 	virtual void	FreeFramebuffer();
 	virtual void	FillRectangle(Rect rect, Color32 argb);
 	virtual void	CopyBackToFront(Rect& rect);
+	virtual void	WaitForVSync();
 
 private:
 	bool CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDesc);

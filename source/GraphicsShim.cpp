@@ -9,7 +9,14 @@
 #include "windows.h"
 #include "winsock.h"
 #include <string>
+#else
+#include "bcm2835.h"
+extern "C"
+{
+	extern void flush_writeback ( uintptr_t start, uintptr_t end );
+}
 #endif
+
 #include "GraphicsShim.h"
 #include "Region.h"
 #include "uart0.h"
@@ -351,11 +358,21 @@ GraphicsContextBase::CopyToPrimary(std::vector<Rect> rects, bool alphaBlend)
 			Color32* src = mCurrBufferPtr + srcRect.x + (y + srcRect.y) * (mFBProperties.mStride >> 2);
 			Color32* dst = mPrimaryContext->GetSelectedFramebuffer() + dstRect.x + (y + dstRect.y) * (mPrimaryContext->GetFramebufferProperties().mStride >> 2);
 			//UartPrintf("CopyToPrimary: src=%p, dst=%p\n", src,dst);
-			if (alphaBlend)
+			if (alphaBlend && (mGlobalAlpha != eOpaque))
 			{
 				for (int16_t x = 0; x < srcRect.w; x++)
 				{
 					*dst = src->AlphaBlend(*dst, mGlobalAlpha);
+					src++;
+					dst++;
+					Sleep(0);
+				}
+			}
+			else if (alphaBlend)
+			{
+				for (int16_t x = 0; x < srcRect.w; x++)
+				{
+					*dst = src->AlphaBlend(*dst);
 					src++;
 					dst++;
 					Sleep(0);
@@ -405,6 +422,7 @@ void
 GraphicsContextBase::CopyBackToFront(Rect& rect)
 {
 	PROFILE_START(mProfileData.mCopyBackToFront)
+	//UartPrintf("CopyBackToFront: src=%p, dst=%p\n", mBackBufferPtr, mFrontBufferPtr);
 #ifdef WIN32
 	for (int16_t y = 0; y < mFBProperties.mGeometry.h; y++)
 	{
@@ -1321,6 +1339,30 @@ GraphicsContextPi::~GraphicsContextPi()
 	FreeFramebuffer();
 }
 
+void __attribute__((optimize("O0")))
+GraphicsContextPi::WaitForVSync()
+{
+	// There is a hack to get a vsync interrupt for the Pi using fake_vsync_isr=1 in config.txt
+	// This will set the SMI interrupt when vsync happens.
+	// The SMI interrupt is GPU interrupt 48
+	// First, clear the SMI interrupt
+	uint32_t* smi        = (uint32_t*)0x20600000;
+	*smi = 0;
+
+//	uint32_t* intBase = (uint32_t*)(BCM2835_INTERRUPT_BASE);
+//	for (int i=0;i<9;i++)
+//	{
+//		UartPrintf("interrupt register @ address=%p. Val=%p\n", intBase+i, *(intBase+i));
+//	}
+	uint32_t* intPending = (uint32_t*)(BCM2835_INTERRUPT_BASE + BCM2835_IRQ_PENDING_2);
+	//UartPrintf("Waiting for vsync interrupt @ address=%p. Val=%p. smi=%p, *smi=%p\n", intPending, *intPending, smi, *smi);
+	while ((*intPending & (1 << (48-32))) == 0)
+	{
+		//UartPrintf("Waiting for vsync interrupt @ address=%p. Val=%p\n", intPending, *intPending);
+	}
+
+}
+
 bool
 GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 {
@@ -1328,6 +1370,15 @@ GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 	mFBProperties = properties;
 
 	UartPrintf("AllocatePrimaryFramebuffer() this=%p\n", this);
+
+	// Set the vsync interrupt while we are here
+	// There is a hack to do this for the Pi using fake_vsync_isr=1 in config.txt
+	// This will set the SMI interrupt when vsync happens.
+	// The SMI interrupt is GPU interrupt 48
+	uint32_t* intEn = (uint32_t*)(BCM2835_INTERRUPT_BASE + BCM2835_IRQ_EN_IRQ_2);
+	*intEn = 1 << (48-32);
+
+	UartPrintf("Enabling vsync interrupt @ address=%p. Val=%p\n", intEn, *intEn);
 
 	bool res = false;
 	do
@@ -1342,7 +1393,7 @@ GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 		if (res)
 		{
 			mFBProperties.mStride = fbDesc.pitch;
-			mFrontBufferPtr = (Color32*)fbDesc.buffer;
+			mFrontBufferPtr = (Color32*)((uintptr_t)fbDesc.buffer & (uintptr_t)~kVideoCoreMailboxDisableCache);
 			mCurrBufferPtr  = mFrontBufferPtr;
 			if (properties.mDoubleBuffer)
 			{
@@ -1355,10 +1406,10 @@ GraphicsContextPi::AllocatePrimaryFramebuffer(FramebufferProperties& properties)
 				}
 				// AllocateFramebuffer will set the latest buffer to mFrontBuffer, so undo that operation
 				mBackBufferPtr = mFrontBufferPtr;
-				mFrontBufferPtr = (Color32*)fbDesc.buffer;
+				mFrontBufferPtr = (Color32*)((uintptr_t)fbDesc.buffer & (uintptr_t)~kVideoCoreMailboxDisableCache);
 			}
 		}
-		UartPrintf("Allocate primary framebuffer : front = %x\n", mFrontBufferPtr);
+//		UartPrintf("Allocate primary framebuffer : front = %x\n", mFrontBufferPtr);
 	} while (false);
 	return res;
 }
@@ -1373,12 +1424,12 @@ GraphicsContextPi::AllocateFramebuffer(FramebufferProperties& properties)
 	{
 		properties.mStride = properties.mGeometry.w * (properties.mBitsPerPixel / 8);
 
-		UartPrintf("Allocate framebuffer w=%d, h=%d, bpp=%d, stride=%d\n", properties.mGeometry.w, properties.mGeometry.h,
-			properties.mBitsPerPixel, properties.mStride);
+//		UartPrintf("Allocate framebuffer w=%d, h=%d, bpp=%d, stride=%d\n", properties.mGeometry.w, properties.mGeometry.h,
+//			properties.mBitsPerPixel, properties.mStride);
 		size_t bufferSize = properties.mStride * properties.mGeometry.h;
 		mFrontBufferPtr = new Color32[bufferSize/4];
 		res = mFrontBufferPtr != NULL;
-		UartPrintf("Allocate framebuffer size=%d, res=%d: front = %x\n", bufferSize, (int)res, mFrontBufferPtr);
+//		UartPrintf("Allocate framebuffer size=%d, res=%d: front = %x\n", bufferSize, (int)res, mFrontBufferPtr);
 		mCurrBufferPtr  = mFrontBufferPtr;
 
 	} while (false);
@@ -1456,7 +1507,7 @@ GraphicsContextPi::CreatePrimaryFramebuffer(VideoCoreFramebufferDescriptor& fbDe
 			UartPrintf("fbDesc.buffer is %p\n", fbDesc.buffer);
 		}
 		res = true;
-		UartPrintf("Success, framebuffer address is %p\n", fbDesc.buffer);
+		//UartPrintf("Success, framebuffer address is %p\n", fbDesc.buffer);
 	} while (false);
 	return res;
 }

@@ -66,11 +66,17 @@ typedef enum
 	eBase16
 } eIntegerBase;
 
-void UartPutChar(char val);
-char UartGetChar();
-void UartFlushRxFifo();
-void UartInit ();
-int UartPrintf(const char *fmt, ...);
-int UartPrintInt(int i, eIntegerBase base);
-int UartPrintPtr(void* i);
-
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+	void UartPutChar(char val);
+	char UartGetChar();
+	void UartFlushRxFifo();
+	void UartInit ();
+	int UartPrintf(const char *fmt, ...);
+	int UartPrintInt(int i, eIntegerBase base);
+	int UartPrintPtr(void* i);
+#ifdef __cplusplus
+}
+#endif
